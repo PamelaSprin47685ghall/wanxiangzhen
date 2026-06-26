@@ -23,6 +23,17 @@ let encodeStateSnapshot (dag: Dag) : obj =
                    dependsOn = List.toArray t.DependsOn; slavePid = t.SlavePid |})
     box {| sessions = [| box {| sessionId = dag.SessionId; tasks = List.toArray tasks |} |] |}
 
+let encodeFullState (activeDag: Dag) (sessions: Map<string, Dag>) : obj =
+    let mkSession (dag: Dag) =
+        let tasks =
+            dag.Tasks |> Map.toList |> List.map (fun (_, t) ->
+                box {| id = t.Id; title = t.Title; status = statusToString t.Status
+                       dependsOn = List.toArray t.DependsOn; slavePid = t.SlavePid |})
+        box {| sessionId = dag.SessionId; tasks = List.toArray tasks |}
+    let active = [mkSession activeDag]
+    let inactive = sessions |> Map.toList |> List.map snd |> List.map mkSession
+    box {| sessions = List.toArray (active @ inactive) |}
+
 let encodeFfResponseBody (r: FfResult) : obj =
     match r with
     | Merged sha -> box {| result = "merged"; masterSha = sha |}
@@ -49,4 +60,13 @@ let decodeSubmitBody (body: obj) : string option =
 
 let decodeRegisterBody (body: obj) : int option =
     let v = get body "pid"
-    if isNullish v then None else Some (unbox<int> v)
+    if isNullish v then None
+    else
+        try Some (unbox<int> v)
+        with _ ->
+            try Some (int (string v))
+            with _ -> None
+
+let decodeLogBody (body: obj) : string option =
+    let v = get body "message"
+    if isNullish v then None else Some (string v)

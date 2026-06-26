@@ -21,11 +21,8 @@ let nodeProcess : obj = jsNative
 [<Emit("process.kill($0, $1)")>]
 let killPid (pid: int) (signal: obj) : unit = jsNative
 
-let mkEvent (ty: SquadEventType) (sid: string) : SquadEvent =
-    { Type = ty; SessionId = sid; TaskId = None; Title = None
-      Description = None; DependsOn = None; WorktreePath = None
-      BranchName = None; SlavePid = None; CommitSha = None
-      MasterSha = None; Merged = None }
+// Each SquadEvent case carries exactly its fields; callers construct cases directly.
+// No record-update builder is needed — sessionId is always known at the call site.
 
 let nowUtc () : string = System.DateTime.UtcNow.ToString("o")
 
@@ -36,7 +33,8 @@ let generateTaskId () : string =
 
 type CoordinatorRuntime = {
     mutable Dag: Dag
-    Config: SquadConfig
+    mutable Sessions: Map<string, Dag>
+    mutable Config: SquadConfig
     MasterBranch: string
     ProjectRoot: string
     mutable MasterSessionId: string
@@ -50,11 +48,23 @@ type CoordinatorRuntime = {
     mutable PidPollHandle: obj option
 }
 
+let rec private tryPromptWithRetry (client: obj) (sessionId: string) (msg: string) (delay: int) (remaining: int) : JS.Promise<unit> =
+    if remaining <= 0 then Promise.lift ()
+    else
+        promise {
+            try
+                do! promptSession client sessionId msg
+            with _ ->
+                if remaining > 1 then
+                    do! Promise.sleep delay
+                    do! tryPromptWithRetry client sessionId msg (delay * 2) (remaining - 1)
+        }
+
 let injectEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<unit> =
     let msg = encodeEvent e
     rt.InjectQueue.Enqueue(fun () ->
         if rt.MasterSessionId = "" then Promise.lift ()
-        else promptSession rt.Client rt.MasterSessionId msg)
+        else tryPromptWithRetry rt.Client rt.MasterSessionId msg 500 3)
     |> Promise.map ignore
 
 let injectEventFire (rt: CoordinatorRuntime) (e: SquadEvent) : unit =

@@ -2,6 +2,26 @@ module Wanxiangzhen.Kernel.Dag
 
 open Wanxiangzhen.Kernel.Task
 
+type DagValidationError =
+    | DanglingDependency of taskId: string * unknownDep: string
+    | DependencyCycle of cycle: string list
+
+type SquadUpdateOutcome =
+    | Success of createdCount: int
+    | DependencyErrors of errors: (string * string) list
+    | CycleDetected of cycle: string list
+    | InvalidInput of message: string
+
+let formatSquadUpdateOutcome (o: SquadUpdateOutcome) : string =
+    match o with
+    | Success n -> sprintf "%d tasks created, scheduler notified." n
+    | DependencyErrors errs ->
+        let msgs = errs |> List.map (fun (tid, dep) -> tid + " dependsOn unknown " + dep)
+        sprintf "Dependency error: %s. Fix dependencies." (String.concat "; " msgs)
+    | CycleDetected cycle ->
+        sprintf "Dependency cycle detected: %s. Please re-decompose without cycles." (String.concat " → " cycle)
+    | InvalidInput msg -> sprintf "Error: %s" msg
+
 type Dag = {
     SessionId: string
     Tasks: Map<string, Task>
@@ -76,3 +96,15 @@ let detectCycle (tasks: (string * string list) list) : string list option =
     match topologicalOrder tasks with
     | Ok _ -> None
     | Error cycle -> Some cycle
+
+let formatDag (dag: Dag) : string =
+    let sb = System.Text.StringBuilder()
+    sb.Append(sprintf "Session: %s" dag.SessionId) |> ignore
+    if dag.RootRequirement <> "" then sb.Append(sprintf "\nRequirement: %s" dag.RootRequirement) |> ignore
+    if dag.Tasks.IsEmpty then sb.Append("\n(no tasks)") |> ignore
+    else
+        sb.Append("\n") |> ignore
+        for t in dag.Tasks |> Map.toList |> List.map snd |> List.sortBy (fun t -> t.Id) do
+            let deps = if t.DependsOn = [] then "-" else t.DependsOn |> String.concat ", "
+            sb.Append(sprintf "\n  [%s] %s | deps: %s | %s" t.Id t.Title deps (Wanxiangzhen.Kernel.Task.statusToString t.Status)) |> ignore
+    sb.ToString()

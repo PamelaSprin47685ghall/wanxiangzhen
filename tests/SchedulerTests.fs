@@ -8,7 +8,7 @@ open Wanxiangzhen.Tests.Assert
 let private mkTask id deps status =
     { Id = id; Title = ""; Description = ""; DependsOn = deps
       Status = status; WorktreePath = None; BranchName = None
-      SlavePid = None; MergedSha = None; CreatedAt = ""; UpdatedAt = "" }
+      SlavePid = None; LastHeartbeatAt = None; MergedSha = None; CreatedAt = ""; UpdatedAt = "" }
 
 let entries () : (string * (unit -> unit)) list = [
     ("Scheduler.empty dag", fun () ->

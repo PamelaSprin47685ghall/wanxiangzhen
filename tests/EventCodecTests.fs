@@ -6,43 +6,27 @@ open Wanxiangzhen.Tests.Assert
 
 let entries () : (string * (unit -> unit)) list = [
     ("Codec.TaskCreated round-trip", fun () ->
-        let e = { Type = TaskCreated; SessionId = "s1"; TaskId = Some "a1";
-                  Title = Some "title"; Description = Some "desc"
-                  DependsOn = Some []; WorktreePath = None; BranchName = None
-                  SlavePid = None; CommitSha = None; MasterSha = None; Merged = None }
-        let encoded = encodeEvent e
+        let encoded = encodeEvent (TaskCreated ("s1", "a1", "title", "desc", []))
         check (encoded.StartsWith "---")
         match decodeEvent encoded with
-        | Some d ->
-            equal TaskCreated d.Type
-            equal "s1" d.SessionId
-            equal (Some "a1") d.TaskId
-            equal (Some "title") d.Title
-        | None -> check false)
+        | Some (TaskCreated (_, tid, title, _, deps)) ->
+            equal "a1" tid
+            equal "title" title
+        | _ -> check false)
 
     ("Codec.TaskMerged round-trip", fun () ->
-        let e = { Type = TaskMerged; SessionId = "s1"; TaskId = Some "a1"
-                  Title = None; Description = None; DependsOn = None
-                  WorktreePath = None; BranchName = None; SlavePid = None
-                  CommitSha = None; MasterSha = Some "sha123"; Merged = None }
-        let encoded = encodeEvent e
+        let encoded = encodeEvent (TaskMerged ("s1", "a1", "sha123"))
         match decodeEvent encoded with
-        | Some d ->
-            equal TaskMerged d.Type
-            equal (Some "sha123") d.MasterSha
-        | None -> check false)
+        | Some (TaskMerged (_, _, sha)) ->
+            equal "sha123" sha
+        | _ -> check false)
 
     ("Codec.TaskCreated with deps", fun () ->
-        let e = { Type = TaskCreated; SessionId = "s1"; TaskId = Some "a1";
-                  Title = Some "t"; Description = None
-                  DependsOn = Some ["b1"; "c1"]
-                  WorktreePath = None; BranchName = None; SlavePid = None
-                  CommitSha = None; MasterSha = None; Merged = None }
-        let encoded = encodeEvent e
+        let encoded = encodeEvent (TaskCreated ("s1", "a1", "t", "d", ["b1"; "c1"]))
         match decodeEvent encoded with
-        | Some d ->
-            equal (Some ["b1"; "c1"]) d.DependsOn
-        | None -> check false)
+        | Some (TaskCreated (_, _, _, _, deps)) ->
+            equal ["b1"; "c1"] deps
+        | _ -> check false)
 
     ("Codec.no frontmatter", fun () ->
         isNone (decodeEvent "just some text"))

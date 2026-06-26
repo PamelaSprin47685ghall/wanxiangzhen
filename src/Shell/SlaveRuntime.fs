@@ -76,7 +76,7 @@ let doneBeacon (cfg: SlaveConfig) : JS.Promise<unit> =
         with _ -> ()
     }
 
-let submitToSquad (cfg: SlaveConfig) : JS.Promise<string> =
+let submitToSquad (cfg: SlaveConfig) : JS.Promise<SubmitOutcome> =
     promise {
         let commitSha = revParseHead cfg.WorktreePath
         let url = cfg.CoordinatorUrl + "/task/" + cfg.TaskId + "/submit"
@@ -89,25 +89,19 @@ let submitToSquad (cfg: SlaveConfig) : JS.Promise<string> =
         try
             let! res = fetch url init
             if resStatus res = 404 then
-                return "Task not found on coordinator. Report to user and stop."
+                return TaskNotFound
             else
                 let! bodyText = resText res
                 let parsed = JSON?("parse")(bodyText)
                 match decodeFfResult parsed with
-                | Some (Merged sha) ->
-                    return sprintf "Merged into %s @ %s. Task complete." cfg.MasterBranch sha
-                | Some (RebaseNeeded sha) ->
-                    return sprintf "Cannot fast-forward. %s at %s. Run: git rebase %s. Then submit_to_squad again." cfg.MasterBranch sha cfg.MasterBranch
-                | Some StaleCommit ->
-                    return "Branch HEAD differs. Commit latest work, then submit_to_squad again."
-                | Some (CoordinatorNotReady _) ->
-                    return "Coordinator not ready. Wait and submit_to_squad again."
-                | Some (NotSubmittable s) ->
-                    return sprintf "Not submittable (status: %s). Report to user." s
-                | None -> return "Unexpected coordinator response. Report to user."
+                | Some ff -> return Response ff
+                | None -> return CoordinatorUnreachable
         with _ ->
-            return "Coordinator unreachable. Report to user and wait."
+            return CoordinatorUnreachable
     }
+
+let formatSubmitResult (cfg: SlaveConfig) : JS.Promise<string> =
+    submitToSquad cfg |> Promise.map (formatSubmitOutcome cfg.MasterBranch)
 
 let querySquad (cfg: SlaveConfig) (query: string) : JS.Promise<string> =
     promise {
@@ -126,7 +120,7 @@ let querySquad (cfg: SlaveConfig) (query: string) : JS.Promise<string> =
 let slaveToolDefs (cfg: SlaveConfig) : obj =
     let submitDef = createObj [
         "description", box "Submit completed work to squad coordinator for fast-forward merge into the integration branch. Prerequisites: changes committed, review passed (if /loop is available). Success → merged. Failure → rebase needed."
-        "execute", box (fun (_: obj) -> submitToSquad cfg)
+        "execute", box (fun (_: obj) -> formatSubmitResult cfg)
     ]
     let queryDef = createObj [
         "description", box "Query squad coordinator for current DAG state or a specific task's details."

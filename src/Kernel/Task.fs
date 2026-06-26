@@ -17,6 +17,7 @@ type Task = {
     WorktreePath: string option
     BranchName: string option
     SlavePid: int option
+    LastHeartbeatAt: string option
     MergedSha: string option
     CreatedAt: string
     UpdatedAt: string
@@ -54,11 +55,14 @@ let canTransition (from: TaskStatus) (toStatus: TaskStatus) : bool =
     | _ -> false
 
 let withStatus (task: Task) (newStatus: TaskStatus) (now: string) : Task =
-    { task with Status = newStatus; UpdatedAt = now }
+    if canTransition task.Status newStatus then
+        { task with Status = newStatus; UpdatedAt = now }
+    else
+        task
 
 let create (id: string) (title: string) (description: string)
            (dependsOn: string list) (now: string) : Task =
-    { Id = id; Title = title; Description = description; DependsOn = dependsOn
-      Status = Pending; WorktreePath = None; BranchName = None
-      SlavePid = None; MergedSha = None
-      CreatedAt = now; UpdatedAt = now }
+      { Id = id; Title = title; Description = description; DependsOn = dependsOn
+        Status = Pending; WorktreePath = None; BranchName = None
+        SlavePid = None; LastHeartbeatAt = None; MergedSha = None
+        CreatedAt = now; UpdatedAt = now }

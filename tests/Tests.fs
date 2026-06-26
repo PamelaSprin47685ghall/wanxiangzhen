@@ -11,6 +11,7 @@ let private allSyncTests : (string * (unit -> unit)) list =
     @ Wanxiangzhen.Tests.EventReplayTests.entries ()
     @ Wanxiangzhen.Tests.SchedulerTests.entries ()
     @ Wanxiangzhen.Tests.EventCodecTests.entries ()
+    @ Wanxiangzhen.Tests.FfDecisionTests.entries ()
 
 let runAll (_args: string array) : JS.Promise<int> =
     promise {

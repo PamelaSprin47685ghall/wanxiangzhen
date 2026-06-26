@@ -9,28 +9,35 @@ open Wanxiangzhen.Shell.Dyn
 
 let private fmKey (e: SquadEvent) =
     let o = createObj [
-        "squad_event", box (eventTypeName e.Type)
-        "session_id", box e.SessionId
+        "squad_event", box (eventTypeName e)
+        "session_id",  box (eventSessionId e)
     ]
-    let addOpt (key: string) (v: 'a option) =
-        match v with Some x -> setKey o key (box x) | None -> ()
-    addOpt "task_id" e.TaskId
-    addOpt "title" e.Title
-    match e.DependsOn with
-    | Some xs when xs.Length > 0 -> setKey o "depends_on" (box (List.toArray xs))
-    | _ -> ()
-    addOpt "worktree_path" e.WorktreePath
-    addOpt "branch_name" e.BranchName
-    addOpt "slave_pid" e.SlavePid
-    addOpt "commit_sha" e.CommitSha
-    addOpt "master_sha" e.MasterSha
-    addOpt "merged" e.Merged
+    match e with
+    | TaskCreated (_, tid, title, _, deps) ->
+        setKey o "task_id" (box tid)
+        setKey o "title" (box title)
+        if deps <> [] then setKey o "depends_on" (box (List.toArray deps))
+    | TaskStarted (_, tid, wt, branch) ->
+        setKey o "task_id" (box tid)
+        setKey o "worktree_path" (box wt)
+        setKey o "branch_name" (box branch)
+    | TaskSubmitted (_, tid, sha) ->
+        setKey o "task_id" (box tid)
+        setKey o "commit_sha" (box sha)
+    | TaskMerged (_, tid, sha) ->
+        setKey o "task_id" (box tid)
+        setKey o "master_sha" (box sha)
+    | TaskDone (_, tid, merged) ->
+        setKey o "task_id" (box tid)
+        setKey o "merged" (box merged)
+    | SquadCancelled _ -> ()
+    | SquadCreated _ -> ()
     o
 
 let encodeEvent (e: SquadEvent) : string =
     let fmObj = fmKey e
     let yamlText = Yaml.stringify fmObj
-    let prose = eventProse e.Type
+    let prose = eventProse e
     "---\n" + yamlText + "---\n\n" + prose
 
 let decodeEvent (text: string) : SquadEvent option =
@@ -45,9 +52,10 @@ let decodeEvent (text: string) : SquadEvent option =
             try
                 let parsed = Yaml.parse yamlText
                 let typeName = str parsed "squad_event"
-                match eventTypeFromString typeName with
+                match eventTypeNameFromString typeName with
                 | None -> None
-                | Some et ->
+                | Some _ ->
+                    let sid = str parsed "session_id"
                     let strField k =
                         let v = get parsed k
                         if isNullish v then None else Some (string v)
@@ -61,18 +69,33 @@ let decodeEvent (text: string) : SquadEvent option =
                         let v = get parsed k
                         if isNullish v || not (isArray v) then None
                         else Some ((v :?> obj array) |> Array.map string |> Array.toList)
-                    Some {
-                        Type = et
-                        SessionId = str parsed "session_id"
-                        TaskId = strField "task_id"
-                        Title = strField "title"
-                        Description = None
-                        DependsOn = arrField "depends_on"
-                        WorktreePath = strField "worktree_path"
-                        BranchName = strField "branch_name"
-                        SlavePid = intField "slave_pid"
-                        CommitSha = strField "commit_sha"
-                        MasterSha = strField "master_sha"
-                        Merged = boolField "merged"
-                    }
+                    match typeName with
+                    | "squad_created" ->
+                        let req = strField "requirement" |> Option.defaultValue ""
+                        Some (SquadCreated (sid, req))
+                    | "task_created" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let title = strField "title" |> Option.defaultValue ""
+                        let desc = strField "description" |> Option.defaultValue ""
+                        let deps = arrField "depends_on" |> Option.defaultValue []
+                        Some (TaskCreated (sid, tid, title, desc, deps))
+                    | "task_started" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let wt = strField "worktree_path" |> Option.defaultValue ""
+                        let branch = strField "branch_name" |> Option.defaultValue ""
+                        Some (TaskStarted (sid, tid, wt, branch))
+                    | "task_submitted" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let sha = strField "commit_sha" |> Option.defaultValue ""
+                        Some (TaskSubmitted (sid, tid, sha))
+                    | "task_merged" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let sha = strField "master_sha" |> Option.defaultValue ""
+                        Some (TaskMerged (sid, tid, sha))
+                    | "task_done" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let merged = boolField "merged" |> Option.defaultValue false
+                        Some (TaskDone (sid, tid, merged))
+                    | "squad_cancelled" -> Some (SquadCancelled sid)
+                    | _ -> None
             with _ -> None

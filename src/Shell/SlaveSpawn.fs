@@ -19,6 +19,11 @@ let buildSlaveCommand (terminal: string) (worktree: string) (prompt: string) : s
         "konsole", Array.append [| "--workdir"; worktree; "-e"; "opencode" |] ocArgs
     | "wezterm" ->
         "wezterm", Array.append [| "start"; "--cwd"; worktree; "--"; "opencode" |] ocArgs
+    | "wt" ->
+        "wt.exe", Array.append [| "-d"; worktree; "opencode" |] ocArgs
+    | "iterm2" ->
+        let script = sprintf "cd %s && opencode tui --prompt '%s'" worktree prompt
+        "osascript", [| "-e"; "tell application \"iTerm\" to create window with default profile"; "-e"; sprintf "tell application \"iTerm\" to tell current session of current window to write text \"%s\"" script |]
     | "headless" ->
         "opencode", ocArgs
     | _ ->

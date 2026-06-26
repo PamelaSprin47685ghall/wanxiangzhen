@@ -6,6 +6,7 @@ open Wanxiangzhen.Kernel.SquadPrompts
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.CoordinatorOps
+open Wanxiangzhen.Shell.CoordinatorLifecycle
 open Wanxiangzhen.Shell.SlaveRuntime
 open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.HttpCodec
@@ -63,6 +64,7 @@ let private coordinatorPlugin (ctx: obj) : JS.Promise<obj> =
                 if not (isNullish commands) then
                     setKey commands "squad" (box {| template = "/squad <requirement>"; description = "Decompose requirement into parallel task DAG" |})
                     setKey commands "squad-kill" (box {| template = "/squad-kill [session_id]"; description = "Kill squad slave processes" |})
+                    setKey commands "squad-status" (box {| template = "/squad-status"; description = "Show current squad DAG status" |})
                 return cfg
             }))
         setKey result "command.execute.before" (twoArgHook (fun input output ->
@@ -77,7 +79,13 @@ let private coordinatorPlugin (ctx: obj) : JS.Promise<obj> =
                     let requirement = str input "arguments"
                     do! injectSquadCommand rt requirement sessionId
                 | "squad-kill" ->
-                    do! handleSquadKill rt
+                    let args = str input "arguments"
+                    let sidOpt = if args = "" then None else Some args
+                    do! handleSquadKill rt sidOpt
+                | "squad-status" ->
+                    let dagText = formatDagText rt
+                    let part = createObj [ "type", box "text"; "text", box dagText ]
+                    setKey output "parts" (box [| part |])
                 | _ -> ()
             }))
         setKey result "dispose" (box (fun () ->

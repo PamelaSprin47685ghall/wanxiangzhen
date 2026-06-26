@@ -22,6 +22,7 @@ open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.SymlinkShell
 open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
+open Wanxiangzhen.Shell.StateBackup
 
 let private extractTaskId (path: string) (suffix: string) : string =
     let prefix = "/task/"
@@ -30,17 +31,8 @@ let private extractTaskId (path: string) (suffix: string) : string =
         path.Substring(prefix.Length, path.Length - prefix.Length - suf.Length)
     else ""
 
-let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
-    promise {
-        match findTask taskId rt.Dag with
-        | None -> return ()
-        | Some task when isTerminal task.Status -> return ()
-        | Some task ->
-            let now = nowUtc ()
-            rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
-            injectEventFire rt { mkEvent TaskDone rt.Dag.SessionId with TaskId = Some taskId; Merged = Some false }
-            cleanupTask rt task
-    }
+let formatDagText (rt: CoordinatorRuntime) : string =
+    Wanxiangzhen.Kernel.Dag.formatDag rt.Dag
 
 let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
     promise {
@@ -58,7 +50,8 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
                 with _ -> false
             if not worktreeOk then return ()
             createSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
-            let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch false
+            let vibeFs = detectVibeFs rt.ProjectRoot
+            let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch vibeFs
             let slaveEnv = createObj []
             assignInto slaveEnv (get nodeProcess "env") |> ignore
             setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
@@ -66,6 +59,7 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
             setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
             setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
             setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
+            if vibeFs then setKey slaveEnv "SQUAD_VIBEFS" (box "1")
             spawnSlave rt.Config.Terminal wtPath slaveEnv prompt
             let now = nowUtc ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
@@ -73,12 +67,10 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
                          WorktreePath = Some wtPath
                          BranchName = Some taskId
                          UpdatedAt = now })
-            injectEventFire rt { mkEvent TaskStarted rt.Dag.SessionId
-                                 with TaskId = Some taskId; WorktreePath = Some wtPath
-                                      BranchName = Some taskId }
+            injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, taskId))
     }
 
-let private schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
+let schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
     if rt.Scheduling then Promise.lift ()
     else
         rt.Scheduling <- true
@@ -91,6 +83,20 @@ let private schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
                 rt.Scheduling <- false
         }
 
+let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
+    promise {
+        match findTask taskId rt.Dag with
+        | None -> return ()
+        | Some task when isTerminal task.Status -> return ()
+        | Some task ->
+            let now = nowUtc ()
+            rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
+            injectEventFire rt (TaskDone (rt.Dag.SessionId, taskId, false))
+            cleanupTask rt task
+            saveState rt
+            do! schedulerTick rt
+    }
+
 let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string) : JS.Promise<HttpResponse> =
     match findTask taskId rt.Dag with
     | None ->
@@ -102,8 +108,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
         promise {
             let now = nowUtc ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Submitted now)
-            injectEventFire rt { mkEvent TaskSubmitted rt.Dag.SessionId
-                                 with TaskId = Some taskId; CommitSha = Some reportedSha }
+            injectEventFire rt (TaskSubmitted (rt.Dag.SessionId, taskId, reportedSha))
             let! result =
                 rt.GitQueue.Enqueue(fun () ->
                     promise {
@@ -126,8 +131,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                 let n2 = nowUtc ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
                     { t with Status = TaskStatus.Merged; MergedSha = Some sha; UpdatedAt = n2 })
-                injectEventFire rt { mkEvent TaskMerged rt.Dag.SessionId
-                                     with TaskId = Some taskId; MasterSha = Some sha }
+                injectEventFire rt (TaskMerged (rt.Dag.SessionId, taskId, sha))
                 match findTask taskId rt.Dag with
                 | Some t ->
                     match t.SlavePid with
@@ -137,6 +141,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                     | None -> ()
                     cleanupTask rt t
                 | None -> ()
+                saveState rt
                 do! schedulerTick rt
             | _ ->
                 let n2 = nowUtc ()
@@ -165,8 +170,14 @@ let routeHandler (rt: CoordinatorRuntime) : RouteHandler =
                 let tid = extractTaskId p "done"
                 do! handleSlaveExit rt tid
                 return { StatusCode = 200; Body = encodeResult "acknowledged" }
+            | "POST", p when p.EndsWith "/log" ->
+                let tid = extractTaskId p "log"
+                match decodeLogBody body with
+                | Some _msg ->
+                    return { StatusCode = 200; Body = encodeResult "logged" }
+                | None -> return { StatusCode = 400; Body = encodeResult "bad_request" }
             | "GET", "/state" ->
-                return { StatusCode = 200; Body = encodeStateSnapshot rt.Dag }
+                return { StatusCode = 200; Body = encodeFullState rt.Dag rt.Sessions }
             | "GET", p when p.StartsWith "/task/" ->
                 let tid = p.Substring 6
                 match findTask tid rt.Dag with
@@ -175,7 +186,7 @@ let routeHandler (rt: CoordinatorRuntime) : RouteHandler =
             | _ -> return { StatusCode = 404; Body = encodeResult "not_found" }
         }
 
-let private startPidPolling (rt: CoordinatorRuntime) : unit =
+let startPidPolling (rt: CoordinatorRuntime) : unit =
     rt.PidPollHandle <-
         Some (startPolling 2000 (fun () ->
             promise {
@@ -186,134 +197,9 @@ let private startPidPolling (rt: CoordinatorRuntime) : unit =
                 for t in toCheck do
                     match t.SlavePid with
                     | Some pid when not (isPidAlive pid) -> do! handleSlaveExit rt t.Id
+                    | Some pid when isPidAlive pid ->
+                        let now = nowUtc ()
+                        rt.Dag <- rt.Dag |> updateTask t.Id (fun x -> { x with LastHeartbeatAt = Some now })
                     | _ -> ()
             } |> Promise.start))
 
-let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
-    promise {
-        if rt.MasterSessionId = "" then return ()
-        else
-            let! texts = readAllTexts rt.Client rt.MasterSessionId ""
-            let events = texts |> List.choose decodeEvent
-            rt.Dag <- foldEvents events rt.Dag
-            for t in rt.Dag.Tasks |> Map.toList |> List.map snd do
-                if t.Status = Submitted || t.Status = Running then
-                    match t.BranchName with
-                    | Some b when mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
-                        let sha = revParseRef rt.ProjectRoot rt.MasterBranch
-                        rt.Dag <- rt.Dag |> updateTask t.Id (fun x ->
-                            { x with Status = TaskStatus.Merged; MergedSha = Some sha })
-                    | _ -> ()
-    }
-
-let handleSquadKill (rt: CoordinatorRuntime) : JS.Promise<unit> =
-    promise {
-        let toKill =
-            rt.Dag.Tasks |> Map.toList |> List.map snd
-            |> List.filter (fun t -> t.Status = Running || t.Status = Submitted)
-        for t in toKill do
-            t.SlavePid |> Option.iter (fun pid ->
-                try killPid pid (box "SIGTERM") with _ -> ())
-            let now = nowUtc ()
-            rt.Dag <- rt.Dag |> updateTask t.Id (fun x -> withStatus x Cancelled now)
-        injectEventFire rt { mkEvent SquadCancelled rt.Dag.SessionId
-                             with TaskId = None }
-    }
-
-let buildSquadPrompt (requirement: string) (sessionId: string) : string =
-    buildDecompositionPrompt requirement sessionId
-
-let injectSquadCommand (rt: CoordinatorRuntime) (requirement: string) (sessionId: string)
-                       : JS.Promise<unit> =
-    let prompt = buildSquadPrompt requirement sessionId
-    injectEventFire rt { mkEvent SquadCreated sessionId with Description = Some requirement }
-    promptSession rt.Client sessionId prompt |> Promise.start |> ignore
-    Promise.lift ()
-
-let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
-    let eventsRaw = get args "events"
-    if isNullish eventsRaw || not (isArray eventsRaw) then
-        "Error: events must be a non-empty array."
-    else
-        let inputsWithIds =
-            (eventsRaw :?> obj array) |> Array.toList
-            |> List.map (fun e ->
-                let ty = str e "type"
-                let taskId = let v = get e "taskId" in if isNullish v then None else Some (string v)
-                let title = str e "title"
-                let desc = str e "description"
-                let depsRaw = get e "dependsOn"
-                let deps =
-                    if isNullish depsRaw || not (isArray depsRaw) then []
-                    else (depsRaw :?> obj array) |> Array.map string |> Array.toList
-                let tid = taskId |> Option.defaultValue (generateTaskId ())
-                ty, tid, title, desc, deps)
-        let created = inputsWithIds |> List.filter (fun (ty, _, _, _, _) -> ty = "task_created")
-        let depsList = created |> List.map (fun (_, tid, _, _, deps) -> tid, deps)
-        let existingIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
-        let newIds = depsList |> List.map fst |> Set.ofList
-        let allIds = Set.union existingIds newIds
-        let dangling =
-            depsList |> List.collect (fun (id, deps) ->
-                deps |> List.filter (fun d -> not (Set.contains d allIds))
-                     |> List.map (fun d -> id + " dependsOn unknown " + d))
-        if dangling <> [] then
-            sprintf "Dependency error: %s. Fix dependencies." (dangling |> String.concat "; ")
-        else
-            match detectCycle depsList with
-            | Some cycle ->
-                sprintf "Dependency cycle detected: %s. Please re-decompose without cycles."
-                    (cycle |> String.concat " → ")
-            | None ->
-                let now = nowUtc ()
-                for (ty, tid, title, desc, deps) in inputsWithIds do
-                    if ty = "task_created" then
-                        let task = create tid title desc deps now
-                        rt.Dag <- rt.Dag |> addTask task
-                        injectEventFire rt { mkEvent TaskCreated rt.Dag.SessionId
-                                             with TaskId = Some tid; Title = Some title
-                                                  Description = Some desc; DependsOn = Some deps }
-                    elif ty = "squad_cancelled" then
-                        handleSquadKill rt |> Promise.start
-                schedulerTick rt |> Promise.start
-                sprintf "%d tasks created, scheduler notified." created.Length
-
-let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
-    promise {
-        let config = readConfig directory
-        let mb =
-            match config.MasterBranch with
-            | Some b -> b
-            | None ->
-                if isDetached directory then "master"
-                else revParseBranch directory
-        let token =
-            let hex = "0123456789abcdef"
-            System.String([| for _ in 0..31 -> hex[int (JS.Math.random () * 16.0)] |])
-        let mutable rtOpt : CoordinatorRuntime option = None
-        let! server =
-            startServer token (fun m p b ->
-                promise {
-                    let r = rtOpt |> Option.defaultValue (failwith "CoordinatorRuntime not yet initialized")
-                    let handler = routeHandler r
-                    return! handler m p b
-                })
-        let runtime = {
-            Dag = empty "" ""
-            Config = config
-            MasterBranch = mb
-            ProjectRoot = directory
-            MasterSessionId = ""
-            Client = client
-            Token = token
-            CoordinatorUrl = server.Url
-            GitQueue = SerialQueue ()
-            InjectQueue = SerialQueue ()
-            Server = server
-            Scheduling = false
-            PidPollHandle = None
-        }
-        rtOpt <- Some runtime
-        startPidPolling runtime
-        return runtime
-    }

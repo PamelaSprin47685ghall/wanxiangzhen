@@ -24,7 +24,9 @@
     <Compile Include="src/Shell/PidMonitor.fs" />
     <Compile Include="src/Shell/SymlinkShell.fs" />
     <Compile Include="src/Shell/CoordinatorRuntime.fs" />
+    <Compile Include="src/Shell/StateBackup.fs" />
     <Compile Include="src/Shell/CoordinatorOps.fs" />
+    <Compile Include="src/Shell/CoordinatorLifecycle.fs" />
     <Compile Include="src/Shell/SlaveRuntime.fs" />
     <Compile Include="src/Plugin.fs" />
     <Compile Include="tests/Assert.fs" />
@@ -33,6 +35,7 @@
     <Compile Include="tests/EventReplayTests.fs" />
     <Compile Include="tests/SchedulerTests.fs" />
     <Compile Include="tests/EventCodecTests.fs" />
+    <Compile Include="tests/FfDecisionTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>
