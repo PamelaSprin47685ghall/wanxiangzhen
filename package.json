@@ -3,22 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "wanxiangzhen: multi-agent opencode coordinator plugin in F#→JS via Fable",
+  "description": "wanxiangzhen: multi-agent opencode coordinator — DAG task graph + git worktree isolation + ff-only linear merge",
   "main": "build/src/Plugin.js",
-  "types": "index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
       "import": "./build/src/Plugin.js",
       "require": "./build/src/Plugin.js",
       "default": "./build/src/Plugin.js"
     }
   },
+  "files": ["build"],
   "scripts": {
-    "build": "dotnet fable wanxiangzhen.fsproj --outDir build"
+    "build-and-test": "dotnet fable wanxiangzhen.fsproj --outDir build && rm -f build/fable_modules/.gitignore && cp build-package.json build/package.json && node tests/runner.js"
   },
   "dependencies": {
     "@fable-org/fable-library-js": "^2.1.1",
+    "@opencode-ai/plugin": "^1.17.4",
     "yaml": "^2.9.0"
   }
 }

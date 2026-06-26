@@ -1,0 +1,9 @@
+{
+  "name": "wanxiangzhen",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/Plugin.js",
+  "exports": {
+    ".": "./src/Plugin.js"
+  }
+}

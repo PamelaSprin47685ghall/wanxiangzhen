@@ -1,34 +1,38 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <GenerateFSharpDoc2Html>false</GenerateFSharpDoc2Html>
-    <DeterministicSourcePaths>false</DeterministicSourcePaths>
-  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Thoth.Json" Version="10.4.1" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
-    <PackageReference Include="Expecto" Version="10.2.1" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="src\Kernel\Kernel.fs" />
 
-    <Compile Include="src\Shell\PromiseCompat.fs" />
-    <Compile Include="src\Shell\PromiseQueue.fs" />
-    <Compile Include="src\Shell\NodeInterop.fs" />
-    <Compile Include="src\Shell\GitExecutor.fs" />
-    <Compile Include="src\Shell\EventCodec.fs" />
-    <Compile Include="src\Shell\ConfigReader.fs" />
-    <Compile Include="src\Shell\PidMonitor.fs" />
-    <Compile Include="src\Shell\SlaveSpawn.fs" />
-    <Compile Include="src\Shell\SessionInject.fs" />
-    <Compile Include="src\Shell\Clock.fs" />
-    <Compile Include="src\Shell\CoordinatorState.fs" />
-    <Compile Include="src\Shell\HttpServer.fs" />
-    <Compile Include="src\Plugin.fs" />
-    <Compile Include="tests\KernelTests.fs" />
-    <Compile Include="tests\SchedulerTests.fs" />
-    <Compile Include="tests\CoordinatorStateTests.fs" />
-    <Compile Include="tests\Program.fs" />
+  <ItemGroup>
+    <Compile Include="src/Kernel/Task.fs" />
+    <Compile Include="src/Kernel/SquadConfig.fs" />
+    <Compile Include="src/Kernel/Dag.fs" />
+    <Compile Include="src/Kernel/SquadEvent.fs" />
+    <Compile Include="src/Kernel/Scheduler.fs" />
+    <Compile Include="src/Kernel/FfDecision.fs" />
+    <Compile Include="src/Kernel/SquadPrompts.fs" />
+    <Compile Include="src/Shell/Dyn.fs" />
+    <Compile Include="src/Shell/Yaml.fs" />
+    <Compile Include="src/Shell/SerialQueue.fs" />
+    <Compile Include="src/Shell/GitShell.fs" />
+    <Compile Include="src/Shell/EventCodec.fs" />
+    <Compile Include="src/Shell/ConfigReader.fs" />
+    <Compile Include="src/Shell/SessionIo.fs" />
+    <Compile Include="src/Shell/HttpCodec.fs" />
+    <Compile Include="src/Shell/HttpServer.fs" />
+    <Compile Include="src/Shell/SlaveSpawn.fs" />
+    <Compile Include="src/Shell/PidMonitor.fs" />
+    <Compile Include="src/Shell/SymlinkShell.fs" />
+    <Compile Include="src/Shell/CoordinatorRuntime.fs" />
+    <Compile Include="src/Shell/CoordinatorOps.fs" />
+    <Compile Include="src/Shell/SlaveRuntime.fs" />
+    <Compile Include="src/Plugin.fs" />
+    <Compile Include="tests/Assert.fs" />
+    <Compile Include="tests/TaskTests.fs" />
+    <Compile Include="tests/DagTests.fs" />
+    <Compile Include="tests/EventReplayTests.fs" />
+    <Compile Include="tests/SchedulerTests.fs" />
+    <Compile Include="tests/EventCodecTests.fs" />
+    <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>

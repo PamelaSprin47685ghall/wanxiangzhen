@@ -1,12 +1,15 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <GenerateFSharpDoc2Html>false</GenerateFSharpDoc2Html>
-    <DeterministicSourcePaths>false</DeterministicSourcePaths>
-    <ArtifactsDir>$(MSBuildThisFileDirectory)artifacts/</ArtifactsDir>
-    <BaseIntermediateOutputPath>$(ArtifactsDir)obj/</BaseIntermediateOutputPath>
-    <BaseOutputPath>$(ArtifactsDir)bin/</BaseOutputPath>
+    <RootNamespace>Wanxiangzhen</RootNamespace>
+    <LangVersion>preview</LangVersion>
+    <OtherFlags>--nowarn:1182 --nowarn:3520</OtherFlags>
+    <ArtifactsDir Condition="'$(ArtifactsDir)' == ''">$(MSBuildThisFileDirectory)artifacts/</ArtifactsDir>
+    <BaseIntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <BaseOutputPath>$(ArtifactsDir)bin/$(MSBuildProjectName)/</BaseOutputPath>
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Fable.Core" Version="5.*" />
     <PackageReference Include="Fable.Promise" Version="3.2.0" />

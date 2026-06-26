@@ -1,117 +1,78 @@
-module Shell.EventCodec
-open System
-open System.Text
-open YamlDotNet.Serialization
-open Kernel
+module Wanxiangzhen.Shell.EventCodec
 
-let private deserializer = DeserializerBuilder().IgnoreUnmatchedProperties().Build()
+open Fable.Core
+open Fable.Core.JsInterop
+open Wanxiangzhen.Kernel.SquadEvent
+open Wanxiangzhen.Kernel.SquadPrompts
+open Wanxiangzhen.Shell.Yaml
+open Wanxiangzhen.Shell.Dyn
 
-let parseFrontMatter (text: string) : System.Collections.Generic.Dictionary<string, obj> =
-    let lines = text.Split([|'\n'|], StringSplitOptions.None) |> Array.toList
-    let rec findDelimiters lines =
-        match lines with
-        | "---" :: rest -> findStart rest []
-        | _ -> None
-    and findStart lines acc =
-        match lines with
-        | "---" :: _ -> Some (List.rev acc)
-        | h :: t -> findStart t (h :: acc)
-        | [] -> None
-    match findDelimiters lines with
-    | Some yamlLines ->
-        let yaml = String.Join("\n", yamlLines)
-        try deserializer.Deserialize<System.Collections.Generic.Dictionary<string, obj>>(yaml)
-        with _ -> null
-    | None -> null
+let private fmKey (e: SquadEvent) =
+    let o = createObj [
+        "squad_event", box (eventTypeName e.Type)
+        "session_id", box e.SessionId
+    ]
+    let addOpt (key: string) (v: 'a option) =
+        match v with Some x -> setKey o key (box x) | None -> ()
+    addOpt "task_id" e.TaskId
+    addOpt "title" e.Title
+    match e.DependsOn with
+    | Some xs when xs.Length > 0 -> setKey o "depends_on" (box (List.toArray xs))
+    | _ -> ()
+    addOpt "worktree_path" e.WorktreePath
+    addOpt "branch_name" e.BranchName
+    addOpt "slave_pid" e.SlavePid
+    addOpt "commit_sha" e.CommitSha
+    addOpt "master_sha" e.MasterSha
+    addOpt "merged" e.Merged
+    o
 
-let private tryGetStr (key: string) (dict: System.Collections.Generic.Dictionary<string, obj>) : string option =
-    match dict.TryGetValue(key) with
-    | true, (:? string as s) -> Some s
-    | _ -> None
+let encodeEvent (e: SquadEvent) : string =
+    let fmObj = fmKey e
+    let yamlText = Yaml.stringify fmObj
+    let prose = eventProse e.Type
+    "---\n" + yamlText + "---\n\n" + prose
 
-let private tryGetInt (key: string) (dict: System.Collections.Generic.Dictionary<string, obj>) : int option =
-    match dict.TryGetValue(key) with
-    | true, (:? int as i) -> Some i
-    | _ -> None
-
-let private tryGetBool (key: string) (dict: System.Collections.Generic.Dictionary<string, obj>) : bool option =
-    match dict.TryGetValue(key) with
-    | true, (:? bool as b) -> Some b
-    | _ -> None
-
-let decodeSquadEvent (s: string) : SquadEvent option =
-    match s.ToLowerInvariant() with
-    | "squad_created" -> Some SquadCreated
-    | "task_created" -> Some TaskCreated
-    | "task_started" -> Some TaskStarted
-    | "task_submitted" -> Some TaskSubmitted
-    | "task_merged" -> Some TaskMerged
-    | "task_done" -> Some TaskDone
-    | "squad_cancelled" -> Some SquadCancelled
-    | _ -> None
-
-let decodeTaskId (s: string) : TaskId option =
-    if s.StartsWith("squad-") then Some (TaskId s) else None
-
-let private parseDependsOn (fm: System.Collections.Generic.Dictionary<string, obj>) : TaskId list =
-    match tryGetStr "depends_on" fm with
-    | None -> []
-    | Some s ->
-        if s.StartsWith("[") && s.EndsWith("]") then
-            try
-                let inner = s.Substring(1, s.Length - 2)
-                let ids = inner.Split(',') |> Array.map (fun x -> x.Trim().Trim('"')) |> Array.toList
-                ids |> List.choose decodeTaskId
-            with _ -> []
+let decodeEvent (text: string) : SquadEvent option =
+    let trimmed = text.TrimStart()
+    if not (trimmed.StartsWith "---") then None
+    else
+        let afterFirst = trimmed.Substring 3
+        let endIdx = afterFirst.IndexOf "---"
+        if endIdx < 0 then None
         else
-            []
-
-let eventPayloadFromMap (fm: System.Collections.Generic.Dictionary<string, obj>) : EventPayload option =
-    match tryGetStr "squad_event" fm |> Option.bind decodeSquadEvent with
-    | Some evt ->
-        let sessionId = tryGetStr "session_id" fm |> Option.defaultValue ""
-        let taskId = tryGetStr "task_id" fm |> Option.bind decodeTaskId
-        Some {
-            squadEvent = evt
-            sessionId = sessionId
-            taskId = taskId
-            title = tryGetStr "title" fm
-            description = tryGetStr "description" fm
-            dependsOn = parseDependsOn fm
-            masterSha = tryGetStr "master_sha" fm
-            worktreePath = tryGetStr "worktree_path" fm
-            branchName = tryGetStr "branch_name" fm
-            slavePid = tryGetInt "slave_pid" fm
-            merged = tryGetBool "merged" fm
-            requirement = tryGetStr "requirement" fm
-        }
-    | None -> None
-
-let encodeEvent (evt: EventPayload) (prose: string) : string =
-    let sb = StringBuilder()
-    sb.AppendLine("---") |> ignore
-    let evtName =
-        match evt.squadEvent with
-        | SquadCreated -> "squad_created"
-        | TaskCreated -> "task_created"
-        | TaskStarted -> "task_started"
-        | TaskSubmitted -> "task_submitted"
-        | TaskMerged -> "task_merged"
-        | TaskDone -> "task_done"
-        | SquadCancelled -> "squad_cancelled"
-    sb.AppendLine("squad_event: " + evtName) |> ignore
-    sb.AppendLine("session_id: " + evt.sessionId) |> ignore
-    match evt.taskId with
-    | Some (TaskId id) -> sb.AppendLine("task_id: " + id) |> ignore
-    | None -> ()
-    match evt.title with Some t -> sb.AppendLine("title: \"" + t + "\"") |> ignore | None -> ()
-    match evt.dependsOn with
-    | [] -> ()
-    | deps ->
-        let ids = deps |> List.map (fun (TaskId x) -> "\"" + x + "\"") |> String.concat ", "
-        sb.AppendLine("depends_on: [" + ids + "]") |> ignore
-    match evt.masterSha with Some s -> sb.AppendLine("master_sha: " + s) |> ignore | None -> ()
-    sb.AppendLine("---") |> ignore
-    sb.AppendLine() |> ignore
-    sb.Append(prose) |> ignore
-    sb.ToString()
+            let yamlText = afterFirst.Substring(0, endIdx).Trim()
+            try
+                let parsed = Yaml.parse yamlText
+                let typeName = str parsed "squad_event"
+                match eventTypeFromString typeName with
+                | None -> None
+                | Some et ->
+                    let strField k =
+                        let v = get parsed k
+                        if isNullish v then None else Some (string v)
+                    let intField k =
+                        let v = get parsed k
+                        if isNullish v then None else Some (unbox<int> v)
+                    let boolField k =
+                        let v = get parsed k
+                        if isNullish v then None else Some (unbox<bool> v)
+                    let arrField k =
+                        let v = get parsed k
+                        if isNullish v || not (isArray v) then None
+                        else Some ((v :?> obj array) |> Array.map string |> Array.toList)
+                    Some {
+                        Type = et
+                        SessionId = str parsed "session_id"
+                        TaskId = strField "task_id"
+                        Title = strField "title"
+                        Description = None
+                        DependsOn = arrField "depends_on"
+                        WorktreePath = strField "worktree_path"
+                        BranchName = strField "branch_name"
+                        SlavePid = intField "slave_pid"
+                        CommitSha = strField "commit_sha"
+                        MasterSha = strField "master_sha"
+                        Merged = boolField "merged"
+                    }
+            with _ -> None

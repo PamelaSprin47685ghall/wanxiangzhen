@@ -1,61 +1,30 @@
-module Shell.SlaveSpawn
-open System
-open Kernel
-open Fable.Core.JsInterop
-open Shell.NodeInterop
+module Wanxiangzhen.Shell.SlaveSpawn
 
-type SpawnResult = { childPid: int option; error: string option }
+open Fable.Core
+open Wanxiangzhen.Shell.Dyn
 
-let resolveTerminal (terminalName: string) (worktreePath: string) : string[] * int =
-    let name = terminalName.ToLowerInvariant()
-    match name with
+[<Import("spawn", "node:child_process")>]
+let private childSpawn (cmd: string) (args: string array) (opts: obj) : obj = jsNative
+
+let buildSlaveCommand (terminal: string) (worktree: string) (prompt: string) : string * string array =
+    let ocArgs = [| "tui"; "--prompt"; prompt |]
+    match terminal with
     | "alacritty" ->
-        [| "alacritty"; "--working-directory"; worktreePath; "-e"; "opencode"; "tui"; "--prompt"; "" |], 7
+        "alacritty", Array.append [| "--working-directory"; worktree; "-e"; "opencode" |] ocArgs
     | "kitty" ->
-        [| "kitty"; "--directory"; worktreePath; "opencode"; "tui"; "--prompt"; "" |], 6
+        "kitty", Array.append [| "--directory"; worktree; "opencode" |] ocArgs
     | "gnome-terminal" ->
-        [| "gnome-terminal"; "--working-directory" + "=" + worktreePath; "--"; "opencode"; "tui"; "--prompt"; "" |], 7
+        "gnome-terminal", Array.append [| "--working-directory=" + worktree; "--"; "opencode" |] ocArgs
     | "konsole" ->
-        [| "konsole"; "--workdir"; worktreePath; "-e"; "opencode"; "tui"; "--prompt"; "" |], 7
+        "konsole", Array.append [| "--workdir"; worktree; "-e"; "opencode" |] ocArgs
     | "wezterm" ->
-        [| "wezterm"; "start"; "--cwd"; worktreePath; "--"; "opencode"; "tui"; "--prompt"; "" |], 8
+        "wezterm", Array.append [| "start"; "--cwd"; worktree; "--"; "opencode" |] ocArgs
     | "headless" ->
-        [| "opencode"; "tui"; "--prompt"; "" |], 3
+        "opencode", ocArgs
     | _ ->
-        [| "opencode"; "tui"; "--prompt"; "" |], 3
+        terminal, Array.append [| "--working-directory"; worktree; "-e"; "opencode" |] ocArgs
 
-let createSymlinks (sharedDirs: string list) (projectRoot: string) (worktreePath: string) : unit =
-    for dir in sharedDirs do
-        try
-            // Use NodeInterop.fsExistsSync instead of System.IO.Directory.Exists / File.Exists
-            let src = NodeInterop.pathJoin [| projectRoot; dir |]
-            let dst = NodeInterop.pathJoin [| worktreePath; dir |]
-            if NodeInterop.fsExistsSync src && not (NodeInterop.fsExistsSync dst) then
-                // 用 NodeInterop.execSync 执行 ln -s，避免 System.Diagnostics.Process
-                let relative = NodeInterop.pathRelative worktreePath src
-                // ln -s <relative> <dst>
-                NodeInterop.execSync $"ln -s \"{relative}\" \"{dst}\"" (NodeInterop.mkExecOptions "" null) |> ignore
-                // 写入 .git/info/exclude
-                let excludePath = NodeInterop.pathJoin [| worktreePath; ".git"; "info"; "exclude" |]
-                if NodeInterop.fsExistsSync excludePath then
-                    NodeInterop.fsWriteFileSync excludePath ("\n" + dir + "\n")
-        with _ -> ()
-
-let spawnSlave (env: System.Collections.Generic.IDictionary<string, string>) (terminalName: string) (worktreePath: string) (initialPrompt: string) : SpawnResult =
-    let argsTemplate, promptIdx = resolveTerminal terminalName worktreePath
-    let args = argsTemplate |> Array.copy
-    if promptIdx >= 0 && promptIdx < args.Length then
-        args.[promptIdx] <- initialPrompt
-    try
-        // Use NodeInterop.spawn: first arg = command, rest = args array, mkSpawnOptions worktreePath envObj
-        // env: IDictionary<string,string> -> obj
-        let envObj : obj =
-            let dict = System.Collections.Generic.Dictionary<string, obj>()
-            for kv in env do dict.Add(kv.Key, box kv.Value)
-            dict :> obj
-        let spawnOpts = NodeInterop.mkSpawnOptions worktreePath envObj
-        let child = NodeInterop.spawn args.[0] args.[1..] spawnOpts
-        let pid = getChildPid(child)
-        { childPid = Some pid; error = None }
-    with ex ->
-        { childPid = None; error = Some ex.Message }
+let spawnSlave (terminal: string) (worktree: string) (env: obj) (prompt: string) : unit =
+    let cmd, args = buildSlaveCommand terminal worktree prompt
+    let opts = box {| cwd = worktree; env = env; detached = false; stdio = "ignore" |}
+    childSpawn cmd args opts |> ignore
