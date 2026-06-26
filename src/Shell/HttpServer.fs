@@ -47,7 +47,11 @@ let startServer (token: string) (handler: RouteHandler) : JS.Promise<StartedServ
                     let method = string (req?method)
                     let url = string (req?url)
                     let headers = req?headers
-                    let auth = if isNullish headers then "" else str headers "authorization"
+                    let auth =
+                        if isNullish headers then ""
+                        else
+                            let v = str headers "authorization"
+                            if v <> "" then v else str headers "Authorization"
                     if auth <> "Bearer " + token then
                         writeResponse res 401 (box {| result = "unauthorized" |})
                     else

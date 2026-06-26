@@ -50,9 +50,27 @@ let entries () : (string * (unit -> unit)) list = [
         isNone t.SlavePid
         isNone t.MergedSha)
 
-    ("Task.withStatus", fun () ->
+    ("Task.withStatus valid transition", fun () ->
         let t = create "t1" "t" "d" [] "now"
         let t2 = withStatus t Running "later"
         equal Running t2.Status
+        equal "later" t2.UpdatedAt)
+
+    ("Task.tryWithStatus ok on valid", fun () ->
+        let t = create "t1" "t" "d" [] "now"
+        match tryWithStatus t Running "later" with
+        | Ok t2 -> equal Running t2.Status; equal "later" t2.UpdatedAt
+        | Error _ -> check false)
+
+    ("Task.tryWithStatus error on invalid", fun () ->
+        let t = { (create "t1" "t" "d" [] "now") with Status = Merged }
+        match tryWithStatus t Running "later" with
+        | Ok _ -> check false
+        | Error msg -> check (msg.Length > 0))
+
+    ("Task.withReconciledStatus overrides state machine", fun () ->
+        let t = { (create "t1" "t" "d" [] "now") with Status = Running }
+        let t2 = withReconciledStatus t Merged "later"
+        equal Merged t2.Status
         equal "later" t2.UpdatedAt)
 ]

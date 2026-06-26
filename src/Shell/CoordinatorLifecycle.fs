@@ -36,7 +36,7 @@ let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
                     | Some b when mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
                         let sha = revParseRef rt.ProjectRoot rt.MasterBranch
                         rt.Dag <- rt.Dag |> updateTask t.Id (fun x ->
-                            { x with Status = TaskStatus.Merged; MergedSha = Some sha })
+                            { (withReconciledStatus x TaskStatus.Merged (nowUtc ())) with MergedSha = Some sha })
                     | _ -> ()
             let orphans =
                 rt.Dag.Tasks |> Map.toList |> List.map snd

@@ -1,7 +1,11 @@
 module Wanxiangzhen.Shell.SymlinkShell
 
 open Fable.Core
+open Fable.Core.JsInterop
 open Wanxiangzhen.Shell.Dyn
+
+[<Global>]
+let private console : obj = jsNative
 
 [<Import("symlinkSync", "node:fs")>]
 let private symlinkSync (target: string) (path: string) (ty: string) : unit = jsNative
@@ -18,4 +22,4 @@ let createSymlinks (worktree: string) (projectRoot: string) (sharedDirs: string 
         let linkPath = pathJoin worktree dir
         if existsSync target && not (existsSync linkPath) then
             try symlinkSync target linkPath "dir"
-            with _ -> ())
+            with ex -> console?error (sprintf "symlink failed: %s → %s (%s)" target linkPath (string ex)) |> ignore)

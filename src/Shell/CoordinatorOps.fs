@@ -63,10 +63,9 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
             spawnSlave rt.Config.Terminal wtPath slaveEnv prompt
             let now = nowUtc ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
-                { t with Status = Running
-                         WorktreePath = Some wtPath
-                         BranchName = Some taskId
-                         UpdatedAt = now })
+                { (withStatus t Running now) with
+                     WorktreePath = Some wtPath
+                     BranchName = Some taskId })
             injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, taskId))
     }
 
@@ -130,7 +129,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
             | Merged sha ->
                 let n2 = nowUtc ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
-                    { t with Status = TaskStatus.Merged; MergedSha = Some sha; UpdatedAt = n2 })
+                    { (withStatus t TaskStatus.Merged n2) with MergedSha = Some sha })
                 injectEventFire rt (TaskMerged (rt.Dag.SessionId, taskId, sha))
                 match findTask taskId rt.Dag with
                 | Some t ->

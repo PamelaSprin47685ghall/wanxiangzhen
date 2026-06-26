@@ -8,6 +8,9 @@ open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.ConfigReader
 open Wanxiangzhen.Shell.CoordinatorRuntime
 
+[<Global>]
+let private console : obj = jsNative
+
 [<Import("existsSync", "node:fs")>]
 let existsSync (p: string) : bool = jsNative
 
@@ -41,7 +44,7 @@ let saveState (rt: CoordinatorRuntime) : unit =
                        sessionId = rt.Dag.SessionId |})
         let snapshot = box {| sessionId = rt.Dag.SessionId; requirement = rt.Dag.RootRequirement; tasks = List.toArray tasks |}
         writeFileSync (squadDir rt + "/state.json") (JS.JSON.stringify snapshot)
-    with _ -> ()
+    with ex -> console?error (sprintf "saveState failed: %s" (string ex)) |> ignore
 
 let loadStateFallback (rt: CoordinatorRuntime) : unit =
     try
@@ -63,11 +66,11 @@ let loadStateFallback (rt: CoordinatorRuntime) : unit =
                         let task = create tid (str t "title") (str t "description") deps ""
                         rt.Dag <- rt.Dag |> addTask ({ task with Status = s })
                     | None -> ()
-    with _ -> ()
+    with ex -> console?error (sprintf "loadStateFallback failed: %s" (string ex)) |> ignore
 
 let startConfigWatch (rt: CoordinatorRuntime) : unit =
     try
         fsWatch (rt.ProjectRoot + "/AGENTS.md") (fun _ ->
-            try rt.Config <- readConfig rt.ProjectRoot with _ -> ())
+            try rt.Config <- readConfig rt.ProjectRoot with ex -> console?error (sprintf "config reload failed: %s" (string ex)) |> ignore)
         |> ignore
-    with _ -> ()
+    with ex -> console?error (sprintf "startConfigWatch failed: %s" (string ex)) |> ignore

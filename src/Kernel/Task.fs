@@ -54,11 +54,20 @@ let canTransition (from: TaskStatus) (toStatus: TaskStatus) : bool =
     | Submitted, Merged | Submitted, Running | Submitted, Done | Submitted, Cancelled -> true
     | _ -> false
 
-let withStatus (task: Task) (newStatus: TaskStatus) (now: string) : Task =
+let tryWithStatus (task: Task) (newStatus: TaskStatus) (now: string) : Result<Task, string> =
     if canTransition task.Status newStatus then
-        { task with Status = newStatus; UpdatedAt = now }
+        Ok { task with Status = newStatus; UpdatedAt = now }
     else
-        task
+        Error (sprintf "Invalid transition %s → %s for task %s"
+                (statusToString task.Status) (statusToString newStatus) task.Id)
+
+let withStatus (task: Task) (newStatus: TaskStatus) (now: string) : Task =
+    match tryWithStatus task newStatus now with
+    | Ok t -> t
+    | Error msg -> failwith msg
+
+let withReconciledStatus (task: Task) (newStatus: TaskStatus) (now: string) : Task =
+    { task with Status = newStatus; UpdatedAt = now }
 
 let create (id: string) (title: string) (description: string)
            (dependsOn: string list) (now: string) : Task =
