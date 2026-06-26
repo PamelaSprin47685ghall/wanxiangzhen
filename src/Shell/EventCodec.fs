@@ -31,7 +31,7 @@ let private fmKey (e: SquadEvent) =
         setKey o "task_id" (box tid)
         setKey o "merged" (box merged)
     | SquadCancelled _ -> ()
-    | SquadCreated _ -> ()
+    | SquadCreated (_, req) -> setKey o "requirement" (box req)
     o
 
 let encodeEvent (e: SquadEvent) : string =

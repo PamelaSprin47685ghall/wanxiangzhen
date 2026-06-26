@@ -36,6 +36,7 @@
     <Compile Include="tests/SchedulerTests.fs" />
     <Compile Include="tests/EventCodecTests.fs" />
     <Compile Include="tests/FfDecisionTests.fs" />
+    <Compile Include="tests/CommandHookTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>

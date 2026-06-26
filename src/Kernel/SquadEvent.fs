@@ -40,8 +40,13 @@ let eventTypeNameFromString (s: string) : string option =
 
 let eventProse (e: SquadEvent) : string =
     match e with
-    | SquadCreated (_, req) ->
-        sprintf "Squad session created for: %s. Analyze the requirement and call squad_update to decompose into tasks." req
+    | SquadCreated (_, _req) ->
+        "Decompose this requirement into independently executable tasks. Each task should:\n\
+         - Be completable within a single git worktree\n\
+         - Have clear completion criteria\n\
+         - Minimize file conflicts with other tasks\n\
+         Express dependencies via dependsOn (dependency must be merged first).\n\
+         Call the squad_update tool with an events array containing all task_created events."
     | TaskCreated (_, _, title, _, _) ->
         sprintf "Task '%s' created. Nothing needs to be done. The scheduler will start it once dependencies are merged." title
     | TaskStarted (_, _, _, _) -> "Task started in worktree. Nothing needs to be done."

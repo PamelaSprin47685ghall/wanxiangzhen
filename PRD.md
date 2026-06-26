@@ -422,25 +422,9 @@ POST /task/:id/log             (可选，第三阶段；slave 报告进度)
 
 1. hook input 给出 `{ command:"squad", sessionID, arguments }`。
 2. **捕获 master sessionID**：`masterSessionId ??= input.sessionID`（§5.4）。
-3. 经 `output.parts` 注入一条 user 文本（拆解指令），让 coordinator 自己的 LLM 拆解（决策 2.5：注入到 coordinator 自己的 LLM）：
-
-```yaml
----
-squad_command: create
-session_id: <new squad-session-id>
-requirement: |
-  为登录加"记住我"，需改认证中间件、前端表单、数据库 schema
----
-
-请把上述需求拆解为可独立执行的任务。每个任务应：
-- 能在单个 worktree 内独立完成
-- 有明确完成标准
-- 尽量减少任务间文件冲突
-依赖关系用 dependsOn 表达（被依赖者先 merged，依赖者才基于新 master fork）。
-调用 squad_update 工具一次性提交全部任务（events 数组）。
-```
-
-4. LLM 收到后分析需求，调 `squad_update`（§5.5）。
+3. 生成新的 squad-session-id，创建空 DAG。
+4. `command.execute.before` 把原命令消息改写成 `squad_created` 事件（§3.6）：清除 `output.parts` 并替换为带 frontmatter 的事件文本。这样对话历史里只留一条消息，既是用户输入的事实，也是给 LLM 的拆解指令。
+5. coordinator 自己的 LLM 读取该事件后调用 `squad_update` 提交任务。
 
 #### nudge（LLM 没调 squad_update）
 

@@ -5,7 +5,6 @@ open Fable.Core.JsInterop
 open Wanxiangzhen.Kernel.Task
 open Wanxiangzhen.Kernel.Dag
 open Wanxiangzhen.Kernel.SquadEvent
-open Wanxiangzhen.Kernel.SquadPrompts
 open Wanxiangzhen.Kernel.FfDecision
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.GitShell
@@ -83,21 +82,6 @@ let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.
             schedulerTick rt |> Promise.start
     }
 
-let buildSquadPrompt (requirement: string) (sessionId: string) : string =
-    buildDecompositionPrompt requirement sessionId
-
-let injectSquadCommand (rt: CoordinatorRuntime) (requirement: string) (sessionId: string)
-                       : JS.Promise<unit> =
-    if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
-        rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
-    let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
-    rt.Dag <- empty newSid requirement
-    saveState rt
-    injectEventFire rt (SquadCreated (newSid, requirement))
-    let prompt = buildDecompositionPrompt requirement newSid
-    rt.InjectQueue.Enqueue(fun () -> promptSession rt.Client sessionId prompt) |> Promise.map ignore |> Promise.start |> ignore
-    Promise.lift ()
-
 let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
     let eventsRaw = get args "events"
     if isNullish eventsRaw || not (isArray eventsRaw) then
@@ -152,13 +136,15 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
         let token =
             let hex = "0123456789abcdef"
             System.String([| for _ in 0..31 -> hex[int (JS.Math.random () * 16.0)] |])
-        let mutable rtOpt : CoordinatorRuntime option = None
+        let rtRef = ref None
         let! server =
             startServer token (fun m p b ->
                 promise {
-                    let r = rtOpt |> Option.defaultValue (failwith "CoordinatorRuntime not yet initialized")
-                    let handler = routeHandler r
-                    return! handler m p b
+                    match rtRef.Value with
+                    | None -> return { StatusCode = 503; Body = box {| result = "not_ready" |} }
+                    | Some r ->
+                        let handler = routeHandler r
+                        return! handler m p b
                 })
         let runtime = {
             Dag = empty "" ""
@@ -176,7 +162,7 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             Scheduling = false
             PidPollHandle = None
         }
-        rtOpt <- Some runtime
+        rtRef.Value <- Some runtime
         startPidPolling runtime
         startConfigWatch runtime
         return runtime

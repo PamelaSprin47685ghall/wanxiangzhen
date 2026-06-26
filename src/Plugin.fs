@@ -2,6 +2,9 @@ module Wanxiangzhen.Plugin
 
 open Fable.Core
 open Fable.Core.JsInterop
+open Wanxiangzhen.Kernel.Task
+open Wanxiangzhen.Kernel.Dag
+open Wanxiangzhen.Kernel.SquadEvent
 open Wanxiangzhen.Kernel.SquadPrompts
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
@@ -12,6 +15,8 @@ open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.HttpCodec
 open Wanxiangzhen.Shell.SessionIo
 open Wanxiangzhen.Shell.SerialQueue
+open Wanxiangzhen.Shell.StateBackup
+open Wanxiangzhen.Shell.EventCodec
 
 [<Global("process")>]
 let private nodeProcess : obj = jsNative
@@ -22,6 +27,16 @@ let private envVar (key: string) : string =
 
 let private twoArgHook (f: obj -> obj -> JS.Promise<unit>) =
     box (System.Func<obj, obj, JS.Promise<unit>>(f))
+
+let internal mutateOutputParts (output: obj) (part: obj) : unit =
+    let existing = get output "parts"
+    if isNullish existing then
+        setKey output "parts" (box [| part |])
+    else
+        let list = existing :?> System.Collections.Generic.List<obj>
+        list.Clear()
+        list.Add(part)
+        setKey output "parts" (box list)
 
 let private squadUpdateToolDef (rt: CoordinatorRuntime) : obj =
     let args = createObj [
@@ -49,6 +64,35 @@ let private squadUpdateToolDef (rt: CoordinatorRuntime) : obj =
     ]
     createObj [ "squad_update", box executeDef ]
 
+let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (output: obj) : JS.Promise<unit> =
+    promise {
+        let command = str input "command"
+        match command with
+        | "squad" ->
+            let sessionId = str input "sessionID"
+            if sessionId <> "" && rt.MasterSessionId = "" then
+                rt.MasterSessionId <- sessionId
+                do! replayFromHistory rt
+            let requirement = str input "arguments"
+            if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
+                rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
+            let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
+            rt.Dag <- empty newSid requirement
+            saveState rt
+            let evt = SquadCreated (newSid, requirement)
+            let part = box {| ``type`` = "text"; text = encodeEvent evt |}
+            mutateOutputParts output part
+        | "squad-kill" ->
+            let args = str input "arguments"
+            let sidOpt = if args = "" then None else Some args
+            do! handleSquadKill rt sidOpt
+        | "squad-status" ->
+            let dagText = formatDagText rt
+            let part = box {| ``type`` = "text"; text = dagText |}
+            mutateOutputParts output part
+        | _ -> ()
+    }
+
 let private coordinatorPlugin (ctx: obj) : JS.Promise<obj> =
     promise {
         let client = get ctx "client"
@@ -68,26 +112,7 @@ let private coordinatorPlugin (ctx: obj) : JS.Promise<obj> =
                 return cfg
             }))
         setKey result "command.execute.before" (twoArgHook (fun input output ->
-            promise {
-                let command = str input "command"
-                match command with
-                | "squad" ->
-                    let sessionId = str input "sessionID"
-                    if sessionId <> "" && rt.MasterSessionId = "" then
-                        rt.MasterSessionId <- sessionId
-                        do! replayFromHistory rt
-                    let requirement = str input "arguments"
-                    do! injectSquadCommand rt requirement sessionId
-                | "squad-kill" ->
-                    let args = str input "arguments"
-                    let sidOpt = if args = "" then None else Some args
-                    do! handleSquadKill rt sidOpt
-                | "squad-status" ->
-                    let dagText = formatDagText rt
-                    let part = createObj [ "type", box "text"; "text", box dagText ]
-                    setKey output "parts" (box [| part |])
-                | _ -> ()
-            }))
+            handleCommandExecuteBefore rt input output))
         setKey result "dispose" (box (fun () ->
             rt.Server.Close ()
             rt.PidPollHandle |> Option.iter stopPolling))
@@ -108,7 +133,13 @@ let private slavePlugin (_: obj) : JS.Promise<obj> =
             return result
     }
 
-[<ExportDefault>]
 let plugin (ctx: obj) : JS.Promise<obj> =
     if envVar "SQUAD_COORDINATOR_URL" <> "" then slavePlugin ctx
     else coordinatorPlugin ctx
+
+[<ExportDefault>]
+let pluginModule : obj =
+    createObj [
+        "id", box "wanxiangzhen"
+        "server", box plugin
+    ]
