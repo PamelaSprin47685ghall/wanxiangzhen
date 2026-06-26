@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateFSharpDoc2Html>false</GenerateFSharpDoc2Html>
+    <DeterministicSourcePaths>false</DeterministicSourcePaths>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Thoth.Json" Version="10.4.1" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="Expecto" Version="10.2.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="src\Kernel\Kernel.fs" />
+
+    <Compile Include="src\Shell\PromiseCompat.fs" />
+    <Compile Include="src\Shell\PromiseQueue.fs" />
+    <Compile Include="src\Shell\NodeInterop.fs" />
+    <Compile Include="src\Shell\GitExecutor.fs" />
+    <Compile Include="src\Shell\EventCodec.fs" />
+    <Compile Include="src\Shell\ConfigReader.fs" />
+    <Compile Include="src\Shell\PidMonitor.fs" />
+    <Compile Include="src\Shell\SlaveSpawn.fs" />
+    <Compile Include="src\Shell\SessionInject.fs" />
+    <Compile Include="src\Shell\Clock.fs" />
+    <Compile Include="src\Shell\CoordinatorState.fs" />
+    <Compile Include="src\Shell\HttpServer.fs" />
+    <Compile Include="src\Plugin.fs" />
+    <Compile Include="tests\KernelTests.fs" />
+    <Compile Include="tests\SchedulerTests.fs" />
+    <Compile Include="tests\CoordinatorStateTests.fs" />
+    <Compile Include="tests\Program.fs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+{
+  "name": "wanxiangzhen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "wanxiangzhen: multi-agent opencode coordinator plugin in F#→JS via Fable",
+  "main": "build/src/Plugin.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./build/src/Plugin.js",
+      "require": "./build/src/Plugin.js",
+      "default": "./build/src/Plugin.js"
+    }
+  },
+  "scripts": {
+    "build": "dotnet fable wanxiangzhen.fsproj --outDir build"
+  },
+  "dependencies": {
+    "@fable-org/fable-library-js": "^2.1.1",
+    "yaml": "^2.9.0"
+  }
+}
