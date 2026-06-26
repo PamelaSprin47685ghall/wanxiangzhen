@@ -40,6 +40,9 @@ ehthumbs.db
 *.bak
 *.cache
 
+## Squad runtime state
+.squad/
+
 ## Environment / secrets
 .env
 .env.*
