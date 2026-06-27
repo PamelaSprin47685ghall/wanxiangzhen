@@ -157,8 +157,9 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             let args = createObj [ "events", box events ]
             rt.MasterSessionId <- "squad-session-001"
             let! result = handleSquadUpdate rt args
-            check (result.Contains "squad_cancelled")
+            check (result.Contains "cancelled")
             check (not (result.Contains "tasks_created"))
+            check (not (result.StartsWith "---"))
         })
 
     // ══════════════════════════════════════════════════════════════════════════

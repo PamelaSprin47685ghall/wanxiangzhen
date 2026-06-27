@@ -6,6 +6,7 @@ open Wanxiangzhen.Kernel.Task
 open Wanxiangzhen.Kernel.Dag
 open Wanxiangzhen.Kernel.SquadEvent
 open Wanxiangzhen.Kernel.FfDecision
+open Wanxiangzhen.Kernel.SquadConfig
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.GitShell
 open Wanxiangzhen.Shell.SerialQueue
@@ -87,8 +88,7 @@ let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.
                 | Some sid when sid <> rt.Dag.SessionId -> sid
                 | _ -> rt.Dag.SessionId
             for t in toKill do
-                t.SlavePid |> Option.iter (fun pid ->
-                    try rt.Deps.KillPid pid (box "SIGTERM") with _ -> ())
+                t.SlavePid |> Option.iter (safeKillPid rt.Deps)
             let now = rt.Deps.Now ()
             let updated =
                 targetDag.Tasks |> Map.toList |> List.map snd
@@ -122,18 +122,45 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : JS.Promise<string> 
                 let badId = let v = get badEv "taskId" in if isNullish v then "<no-id>" else string v
                 return formatSquadUpdateOutcome (InvalidInput (sprintf "task_created '%s' must have non-empty title and description." badId))
             | None ->
-                let inputsWithIds =
-                    rawEvents |> List.map (fun e ->
+                let existingTaskIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
+                let rec genWithRetries (used: Set<string>) (remaining: int) : string option =
+                    if remaining <= 0 then None
+                    else
+                        let cand = generateTaskId ()
+                        let inExisting = Set.contains cand existingTaskIds
+                        let inUsed = Set.contains cand used
+                        let onRef = rt.Deps.ShowRefExists rt.ProjectRoot cand
+                        if inExisting || inUsed || onRef then genWithRetries used (remaining - 1)
+                        else Some cand
+                let rec assignIds (used: Set<string>) (evts: obj list) : (string * string * string * string * string list) list =
+                    match evts with
+                    | [] -> []
+                    | e :: rest ->
                         let ty = str e "type"
-                        let taskId = let v = get e "taskId" in if isNullish v then None else Some (string v)
                         let title = str e "title"
                         let desc = str e "description"
                         let depsRaw = get e "dependsOn"
                         let deps =
                             if isNullish depsRaw || not (isArray depsRaw) then []
                             else (depsRaw :?> obj array) |> Array.map string |> Array.toList
-                        let tid = taskId |> Option.defaultValue (generateTaskId ())
-                        ty, tid, title, desc, deps)
+                        if ty <> "task_created" then
+                            // Non-task events: preserve in output, taskId slot = "" (handled downstream by filtering on ty = "task_created")
+                            (ty, "", title, desc, deps) :: assignIds used rest
+                        else
+                            let explicitIdOpt = let v = get e "taskId" in if isNullish v then None else Some (string v)
+                            match explicitIdOpt with
+                            | Some id ->
+                                (ty, id, title, desc, deps) :: assignIds (Set.add id used) rest
+                            | None ->
+                                match genWithRetries used 10 with
+                                | Some tid ->
+                                    (ty, tid, title, desc, deps) :: assignIds (Set.add tid used) rest
+                                | None ->
+                                    // Exhausted retries: generate anyway (extremely unlikely with 65536 space)
+                                    let tid = generateTaskId ()
+                                    (ty, tid, title, desc, deps) :: assignIds (Set.add tid used) rest
+                let inputsWithIds =
+                    assignIds existingTaskIds rawEvents
                 let created = inputsWithIds |> List.filter (fun (ty, _, _, _, _) -> ty = "task_created")
                 let depsList = created |> List.map (fun (_, tid, _, _, deps) -> tid, deps)
                 let existingIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
@@ -165,12 +192,23 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : JS.Promise<string> 
                             inputsWithIds |> List.exists (fun (ty, _, _, _, _) -> ty = "squad_cancelled")
                         let resultText =
                             if createdTasks = [] && hasCancelled then
-                                encodeEvent (SquadCancelled rt.Dag.SessionId)
+                                sprintf "Squad session %s cancelled." rt.Dag.SessionId
                             else
                                 let ev = TasksCreated (rt.Dag.SessionId, createdTasks)
                                 encodeEvent ev
                         schedulerTick rt |> Promise.start |> ignore
                         return resultText
+    }
+
+let createWithDeps (client: obj) (directory: string) (config: SquadConfig) (masterBranch: string) (gitError: string option) (deps: CoordinatorDeps) : JS.Promise<CoordinatorRuntime> =
+    promise {
+        let token = System.String([| for _ in 0..31 -> "0123456789abcdef".[int (JS.Math.random() * 16.0)] |])
+        let rtRef = ref None
+        let! server = startServer token (fun m p b -> promise { match rtRef.Value with None -> return { StatusCode=503; Body=box {| result="not_ready" |} } | Some r -> return! routeHandler r m p b })
+        let runtime = { Dag=empty "" ""; Sessions=Map.empty; Config=config; MasterBranch=masterBranch; ProjectRoot=directory; MasterSessionId=""; Client=client; Token=token; CoordinatorUrl=server.Url; GitQueue=SerialQueue(); InjectQueue=SerialQueue(); Server=server; Scheduling=false; PidPollHandle=None; GitError=gitError; InjectError=None; Deps=deps }
+        rtRef.Value <- Some runtime
+        startPidPolling runtime
+        return runtime
     }
 
 let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
@@ -187,10 +225,6 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
                         revParseBranch directory, None
                 with ex ->
                     "master", Some (string ex.Message)
-        let token =
-            let hex = "0123456789abcdef"
-            System.String([| for _ in 0..31 -> hex[int (JS.Math.random () * 16.0)] |])
-        let rtRef = ref None
         let depsRef = ref {
             PromptSession        = fun _ _ _ -> Promise.lift ()
             ReadAllTexts         = fun _ _ _ -> Promise.lift []
@@ -214,60 +248,29 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             StartPolling         = fun _ _ -> box null
             StopPolling          = fun _ -> ()
             Now                  = fun () -> System.DateTime.UtcNow.ToString("o") }
-        let! server =
-            startServer token (fun m p b ->
-                promise {
-                    match rtRef.Value with
-                    | None -> return { StatusCode = 503; Body = box {| result = "not_ready" |} }
-                    | Some r ->
-                        let handler = routeHandler r
-                        return! handler m p b
-                })
-        let now = System.DateTime.UtcNow.ToString("o")
-        let runtime = {
-            Dag = empty "" ""
-            Sessions = Map.empty
-            Config = config
-            MasterBranch = mb
-            ProjectRoot = directory
-            MasterSessionId = ""
-            Client = client
-            Token = token
-            CoordinatorUrl = server.Url
-            GitQueue = SerialQueue ()
-            InjectQueue = SerialQueue ()
-            Server = server
-            Scheduling = false
-            PidPollHandle = None
-            GitError = gitError
-            InjectError = None
-            Deps = {
-                PromptSession        = promptSession
-                ReadAllTexts         = readAllTexts
-                TryWorktreeAdd       = tryWorktreeAdd
-                TryWorktreeRemoveForce = tryWorktreeRemoveForce
-                TryBranchDeleteForce = tryBranchDeleteForce
-                ShowRefExists        = showRefExists
-                RevParseHead         = revParseHead
-                RevParseRef          = revParseRef
-                RevParseBranch       = revParseBranch
-                IsDetached           = isDetached
-                StatusIsClean        = statusIsClean
-                MergeBaseIsAncestor  = mergeBaseIsAncestor
-                MergeFfOnly          = mergeFfOnly
-                CreateSymlinks       = createSymlinks
-                DetectVibeFs         = detectVibeFs
-                SpawnSlave           = spawnSlave
-                IsPidAlive           = isPidAlive
-                KillPid              = killPid
-                WaitForPidDeath      = fun pid r -> waitForPidDeath depsRef.Value pid r
-                StartPolling         = startPolling
-                StopPolling          = stopPolling
-                Now                  = fun () -> System.DateTime.UtcNow.ToString("o")
-            }
-        }
-        rtRef.Value <- Some runtime
-        depsRef.Value <- runtime.Deps
-        startPidPolling runtime
-        return runtime
+        let deps = {
+            PromptSession         = promptSession
+            ReadAllTexts          = readAllTexts
+            TryWorktreeAdd        = tryWorktreeAdd
+            TryWorktreeRemoveForce = tryWorktreeRemoveForce
+            TryBranchDeleteForce  = tryBranchDeleteForce
+            ShowRefExists         = showRefExists
+            RevParseHead          = revParseHead
+            RevParseRef           = revParseRef
+            RevParseBranch        = revParseBranch
+            IsDetached            = isDetached
+            StatusIsClean         = statusIsClean
+            MergeBaseIsAncestor   = mergeBaseIsAncestor
+            MergeFfOnly           = mergeFfOnly
+            CreateSymlinks        = createSymlinks
+            DetectVibeFs          = detectVibeFs
+            SpawnSlave            = spawnSlave
+            IsPidAlive            = isPidAlive
+            KillPid               = killPid
+            WaitForPidDeath       = fun pid r -> waitForPidDeath depsRef.Value pid r
+            StartPolling          = startPolling
+            StopPolling           = stopPolling
+            Now                   = fun () -> System.DateTime.UtcNow.ToString("o") }
+        depsRef.Value <- deps
+        return! createWithDeps client directory config mb gitError deps
     }

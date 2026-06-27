@@ -78,26 +78,29 @@ let doneBeacon (cfg: SlaveConfig) : JS.Promise<unit> =
 
 let submitToSquad (cfg: SlaveConfig) : JS.Promise<SubmitOutcome> =
     promise {
-        let commitSha = revParseHead cfg.WorktreePath
-        let url = cfg.CoordinatorUrl + "/task/" + cfg.TaskId + "/submit"
-        let body = createObj [ "commitSha", box commitSha ]
-        let init = createObj [
-            "method", box "POST"
-            "headers", box (authHeaders cfg)
-            "body", box (string (JSON?("stringify")(body)))
-        ]
         try
-            let! res = fetch url init
-            if resStatus res = 404 then
-                return TaskNotFound
-            else
-                let! bodyText = resText res
-                let parsed = JSON?("parse")(bodyText)
-                match decodeFfResult parsed with
-                | Some ff -> return Response ff
-                | None -> return CoordinatorUnreachable
-        with _ ->
-            return CoordinatorUnreachable
+            let commitSha = revParseHead cfg.WorktreePath
+            let url = cfg.CoordinatorUrl + "/task/" + cfg.TaskId + "/submit"
+            let body = createObj [ "commitSha", box commitSha ]
+            let init = createObj [
+                "method", box "POST"
+                "headers", box (authHeaders cfg)
+                "body", box (string (JSON?("stringify")(body)))
+            ]
+            try
+                let! res = fetch url init
+                if resStatus res = 404 then
+                    return TaskNotFound
+                else
+                    let! bodyText = resText res
+                    let parsed = JSON?("parse")(bodyText)
+                    match decodeFfResult parsed with
+                    | Some ff -> return Response ff
+                    | None -> return CoordinatorUnreachable
+            with _ ->
+                return CoordinatorUnreachable
+        with ex ->
+            return LocalGitError (string ex.Message)
     }
 
 let formatSubmitResult (cfg: SlaveConfig) : JS.Promise<string> =
@@ -120,7 +123,7 @@ let querySquad (cfg: SlaveConfig) (query: string) : JS.Promise<string> =
 let slaveToolDefs (cfg: SlaveConfig) : obj =
     let submitDef = createObj [
         "description", box "Submit completed work to squad coordinator for fast-forward merge into the integration branch. Prerequisites: changes committed, review passed (if /loop is available). Success → merged. Failure → rebase needed."
-        "execute", box (fun (_: obj) -> formatSubmitResult cfg)
+        "execute", box (System.Func<obj, obj, JS.Promise<string>>(fun (_args: obj) (_ctx: obj) -> formatSubmitResult cfg))
     ]
     let queryDef = createObj [
         "description", box "Query squad coordinator for current DAG state or a specific task's details."
@@ -130,10 +133,10 @@ let slaveToolDefs (cfg: SlaveConfig) : obj =
                 "description", box "'state' for full DAG view, or a task ID for that task's details"
             ])
         ])
-        "execute", box (fun (args: obj) ->
+        "execute", box (System.Func<obj, obj, JS.Promise<string>>(fun (args: obj) (_ctx: obj) ->
             let q = str args "query"
             querySquad cfg q
-        )
+        ))
     ]
     createObj [
         "submit_to_squad", box submitDef

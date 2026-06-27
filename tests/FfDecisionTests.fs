@@ -32,4 +32,9 @@ let entries () : (string * (unit -> unit)) list = [
     ("FfDecision.format CoordinatorUnreachable", fun () ->
         let r = formatSubmitOutcome "main" CoordinatorUnreachable
         check (r.Contains "unreachable"))
+
+    ("FfDecision.format LocalGitError", fun () ->
+        let r = formatSubmitOutcome "main" (LocalGitError "not a git repository")
+        check (r.Contains "Local git error")
+        check (r.Contains "not a git repository"))
 ]

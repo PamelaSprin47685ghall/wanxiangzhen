@@ -2,6 +2,7 @@ module Wanxiangzhen.Tests.SlaveRuntimeTests
 
 open Fable.Core
 open Fable.Core.JsInterop
+open Wanxiangzhen.Kernel.FfDecision
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.SlaveRuntime
 open Wanxiangzhen.Tests.Assert
@@ -81,4 +82,19 @@ let entries () : (string * (unit -> unit)) list = [
         setKey env "SQUAD_WORKTREE_PATH" (box origWt)
         setKey env "SQUAD_MASTER_BRANCH" (box origMb)
         setKey env "SQUAD_TOKEN" (box origTk))
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Async tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
+    ("SlaveRuntime.submitToSquad returns LocalGitError for invalid worktree", fun () ->
+        promise {
+            let cfg = { testConfig with WorktreePath = "/nonexistent/worktree/path" }
+            let! outcome = submitToSquad cfg
+            match outcome with
+            | LocalGitError _ -> check true
+            | _               -> check false
+        })
 ]

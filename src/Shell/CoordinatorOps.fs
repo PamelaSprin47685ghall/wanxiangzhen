@@ -105,6 +105,9 @@ let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit>
             do! schedulerTick rt
     }
 
+let safeKillPid (deps: CoordinatorDeps) (pid: int) : unit =
+    try deps.KillPid pid (box "SIGTERM") with _ -> ()
+
 let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string) : JS.Promise<HttpResponse> =
     match findTask taskId rt.Dag with
     | None ->
@@ -145,7 +148,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                 | Some t ->
                     match t.SlavePid with
                     | Some pid ->
-                        rt.Deps.KillPid pid (box "SIGTERM")
+                        safeKillPid rt.Deps pid
                         do! rt.Deps.WaitForPidDeath pid 5
                     | None -> ()
                     cleanupTask rt t

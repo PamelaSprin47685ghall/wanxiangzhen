@@ -44,8 +44,9 @@
     <Compile Include="tests/SlaveRuntimeTests.fs" />
     <Compile Include="tests/CoordinatorOpsTests.fs" />
     <Compile Include="tests/ExtendedFfDecisionTests.fs" />
-    <Compile Include="tests/TestFixtures.fs" />
-    <Compile Include="tests/CoordinatorLifecycleTests.fs" />
+      <Compile Include="tests/TestDoubles.fs" />
+      <Compile Include="tests/TestFixtures.fs" />
+      <Compile Include="tests/CoordinatorLifecycleTests.fs" />
     <Compile Include="tests/PluginTests.fs" />
     <Compile Include="tests/ExtendedCoordinatorOpsTests.fs" />
     <Compile Include="tests/GitShellTests.fs" />
@@ -53,6 +54,8 @@
     <Compile Include="tests/SessionIoTests.fs" />
     <Compile Include="tests/PidMonitorTests.fs" />
     <Compile Include="tests/MockE2eTests.fs" />
+    <Compile Include="tests/ExtendedMockE2eTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>
