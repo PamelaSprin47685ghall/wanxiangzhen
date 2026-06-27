@@ -24,7 +24,6 @@
     <Compile Include="src/Shell/PidMonitor.fs" />
     <Compile Include="src/Shell/SymlinkShell.fs" />
     <Compile Include="src/Shell/CoordinatorRuntime.fs" />
-    <Compile Include="src/Shell/StateBackup.fs" />
     <Compile Include="src/Shell/CoordinatorOps.fs" />
     <Compile Include="src/Shell/CoordinatorLifecycle.fs" />
     <Compile Include="src/Shell/SlaveRuntime.fs" />

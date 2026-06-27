@@ -15,7 +15,6 @@ open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.HttpCodec
 open Wanxiangzhen.Shell.SessionIo
 open Wanxiangzhen.Shell.SerialQueue
-open Wanxiangzhen.Shell.StateBackup
 open Wanxiangzhen.Shell.EventCodec
 
 [<Global("process")>]
@@ -78,7 +77,6 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
                 rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
             let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
             rt.Dag <- empty newSid requirement
-            saveState rt
             let evt = SquadCreated (newSid, requirement)
             let part = box {| ``type`` = "text"; text = encodeEvent evt |}
             mutateOutputParts output part
