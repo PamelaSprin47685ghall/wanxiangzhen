@@ -19,7 +19,6 @@ open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.SymlinkShell
 open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
-open Wanxiangzhen.Shell.StateBackup
 open Wanxiangzhen.Shell.CoordinatorOps
 
 let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
@@ -68,7 +67,6 @@ let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
                 let names = orphans |> List.map (fun t -> t.Id) |> String.concat ", "
                 let warning = sprintf "WARNING: Orphan running tasks without PID: %s. Use /squad-kill or ignore." names
                 promptSession rt.Client rt.MasterSessionId warning |> Promise.start |> ignore
-            if rt.Dag.Tasks.IsEmpty then loadStateFallback rt
     }
 
 let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.Promise<unit> =
@@ -150,7 +148,6 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
                     elif ty = "squad_cancelled" then
                         handleSquadKill rt None |> Promise.start
                 schedulerTick rt |> Promise.start
-                saveState rt
                 formatSquadUpdateOutcome (Success created.Length)
 
 let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
@@ -199,6 +196,5 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
         }
         rtRef.Value <- Some runtime
         startPidPolling runtime
-        startConfigWatch runtime
         return runtime
     }

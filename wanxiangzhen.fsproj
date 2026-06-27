@@ -24,7 +24,6 @@
     <Compile Include="src/Shell/PidMonitor.fs" />
     <Compile Include="src/Shell/SymlinkShell.fs" />
     <Compile Include="src/Shell/CoordinatorRuntime.fs" />
-    <Compile Include="src/Shell/StateBackup.fs" />
     <Compile Include="src/Shell/CoordinatorOps.fs" />
     <Compile Include="src/Shell/CoordinatorLifecycle.fs" />
     <Compile Include="src/Shell/SlaveRuntime.fs" />
@@ -42,7 +41,6 @@
     <Compile Include="tests/HttpCodecTests.fs" />
     <Compile Include="tests/SquadConfigTests.fs" />
     <Compile Include="tests/SquadPromptsTests.fs" />
-    <Compile Include="tests/StateBackupTests.fs" />
     <Compile Include="tests/SlaveSpawnTests.fs" />
     <Compile Include="tests/SlaveRuntimeTests.fs" />
     <Compile Include="tests/CoordinatorOpsTests.fs" />

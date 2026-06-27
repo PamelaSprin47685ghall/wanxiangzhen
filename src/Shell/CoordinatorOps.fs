@@ -22,7 +22,6 @@ open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.SymlinkShell
 open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
-open Wanxiangzhen.Shell.StateBackup
 
 let internal extractTaskId (path: string) (suffix: string) : string =
     let prefix = "/task/"
@@ -92,7 +91,6 @@ let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit>
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
             injectEventFire rt (TaskDone (rt.Dag.SessionId, taskId, false))
             cleanupTask rt task
-            saveState rt
             do! schedulerTick rt
     }
 
@@ -140,7 +138,6 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                     | None -> ()
                     cleanupTask rt t
                 | None -> ()
-                saveState rt
                 do! schedulerTick rt
             | _ ->
                 let n2 = nowUtc ()

@@ -22,7 +22,6 @@ let private allSyncTests : (string * (unit -> unit)) list =
     @ Wanxiangzhen.Tests.CoordinatorOpsTests.entries ()
     @ Wanxiangzhen.Tests.PidMonitorTests.entries ()
     @ Wanxiangzhen.Tests.SerialQueueTests.entries ()
-    @ Wanxiangzhen.Tests.StateBackupTests.entries ()
     @ Wanxiangzhen.Tests.SlaveRuntimeTests.entries ()
     @ Wanxiangzhen.Tests.CoordinatorLifecycleTests.entries ()
     @ Wanxiangzhen.Tests.PluginTests.entries ()
