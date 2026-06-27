@@ -144,11 +144,14 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
                     if ty = "task_created" then
                         let task = Wanxiangzhen.Kernel.Task.create tid title desc deps now
                         rt.Dag <- rt.Dag |> addTask task
-                        injectEventFire rt (TaskCreated (rt.Dag.SessionId, tid, title, desc, deps))
                     elif ty = "squad_cancelled" then
                         handleSquadKill rt None |> Promise.start
+                let createdTasks =
+                    created |> List.map (fun (_, tid, title, desc, deps) -> tid, title, desc, deps)
+                let ev = TasksCreated (rt.Dag.SessionId, createdTasks)
+                let resultText = encodeEvent ev
                 schedulerTick rt |> Promise.start
-                formatSquadUpdateOutcome (Success created.Length)
+                resultText
 
 let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
     promise {

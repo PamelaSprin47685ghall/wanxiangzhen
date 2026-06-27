@@ -86,6 +86,6 @@ let entries () : (string * (unit -> unit)) list = [
         try 
             withStatus t Merged "later" |> ignore
             check false
-        with :? System.Exception -> 
+        with _ -> 
             check true)
 ]

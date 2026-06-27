@@ -75,4 +75,30 @@ let entries () : (string * (unit -> unit)) list = [
         let args = createObj [ "events", box events ]
         let result = handleSquadUpdate rt args
         check (result.Contains "cycle"))
+
+    ("handleSquadUpdate success returns YAML frontmatter", fun () ->
+        let rt = mkRuntime ()
+        let events = box [|
+            createObj [
+                "type", box "task_created"
+                "taskId", box "squad-a1b2"
+                "title", box "Task A"
+                "description", box "Desc A"
+                "dependsOn", box [||]
+            ]
+            createObj [
+                "type", box "task_created"
+                "taskId", box "squad-c3d4"
+                "title", box "Task B"
+                "description", box "Desc B"
+                "dependsOn", box [| "squad-a1b2" |]
+            ]
+        |]
+        let args = createObj [ "events", box events ]
+        let result = handleSquadUpdate rt args
+        check (result.StartsWith "---")
+        check (result.Contains "squad_event: tasks_created")
+        check (result.Contains "squad-a1b2")
+        check (result.Contains "squad-c3d4")
+        check (result.Contains "squad-a1b2"))
 ]

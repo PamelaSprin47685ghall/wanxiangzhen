@@ -12,12 +12,14 @@ let private fmKey (e: SquadEvent) =
         "squad_event", box (eventTypeName e)
         "session_id",  box (eventSessionId e)
     ]
-    match e with
-    | TaskCreated (_, tid, title, desc, deps) ->
-        setKey o "task_id" (box tid)
-        setKey o "title" (box title)
-        setKey o "description" (box desc)
-        if deps <> [] then setKey o "depends_on" (box (List.toArray deps))
+    (match e with
+    | TasksCreated (_, tasks) ->
+        let items = System.Collections.Generic.List<obj>()
+        for (tid, title, desc, deps) in tasks do
+            let o2 = createObj [ "task_id", box tid; "title", box title; "description", box desc ]
+            if deps <> [] then setKey o2 "depends_on" (box (List.toArray deps))
+            items.Add o2
+        setKey o "tasks" (box (items.ToArray()))
     | TaskStarted (_, tid, wt, branch) ->
         setKey o "task_id" (box tid)
         setKey o "worktree_path" (box wt)
@@ -32,7 +34,7 @@ let private fmKey (e: SquadEvent) =
         setKey o "task_id" (box tid)
         setKey o "merged" (box merged)
     | SquadCancelled _ -> ()
-    | SquadCreated (_, req) -> setKey o "requirement" (box req)
+    | SquadCreated (_, req) -> setKey o "requirement" (box req));
     o
 
 let encodeEvent (e: SquadEvent) : string =
@@ -74,12 +76,22 @@ let decodeEvent (text: string) : SquadEvent option =
                     | "squad_created" ->
                         let req = strField "requirement" |> Option.defaultValue ""
                         Some (SquadCreated (sid, req))
-                    | "task_created" ->
-                        let tid = strField "task_id" |> Option.defaultValue ""
-                        let title = strField "title" |> Option.defaultValue ""
-                        let desc = strField "description" |> Option.defaultValue ""
-                        let deps = arrField "depends_on" |> Option.defaultValue []
-                        Some (TaskCreated (sid, tid, title, desc, deps))
+                    | "tasks_created" ->
+                        let tasksRaw = get parsed "tasks"
+                        let tasks =
+                            if isNullish tasksRaw || not (isArray tasksRaw) then []
+                            else (tasksRaw :?> obj array) |> Array.toList |> List.choose (fun o ->
+                                let tid = str o "task_id"
+                                if tid = "" then None
+                                else
+                                    let title = str o "title"
+                                    let desc = str o "description"
+                                    let depsArr = get o "depends_on"
+                                    let deps =
+                                        if isNullish depsArr || not (isArray depsArr) then []
+                                        else (depsArr :?> obj array) |> Array.map string |> Array.toList
+                                    Some (tid, title, desc, deps))
+                        Some (TasksCreated (sid, tasks))
                     | "task_started" ->
                         let tid = strField "task_id" |> Option.defaultValue ""
                         let wt = strField "worktree_path" |> Option.defaultValue ""

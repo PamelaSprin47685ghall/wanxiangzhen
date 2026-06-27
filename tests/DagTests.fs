@@ -102,8 +102,8 @@ let entries () : (string * (unit -> unit)) list = [
         check (s.Contains "squad-x9y8"))
 
     ("formatSquadUpdateOutcome Success", fun () ->
-        let s = formatSquadUpdateOutcome (Success 3)
-        equal "3 tasks created, scheduler notified." s)
+        let s = formatSquadUpdateOutcome (Success)
+        equal "Tasks created successfully." s)
 
     ("formatSquadUpdateOutcome DependencyErrors", fun () ->
         let s = formatSquadUpdateOutcome (DependencyErrors [("squad-a1b2", "squad-zzzz")])

@@ -7,14 +7,14 @@ type DagValidationError =
     | DependencyCycle of cycle: string list
 
 type SquadUpdateOutcome =
-    | Success of createdCount: int
+    | Success
     | DependencyErrors of errors: (string * string) list
     | CycleDetected of cycle: string list
     | InvalidInput of message: string
 
 let formatSquadUpdateOutcome (o: SquadUpdateOutcome) : string =
     match o with
-    | Success n -> sprintf "%d tasks created, scheduler notified." n
+    | Success -> "Tasks created successfully."
     | DependencyErrors errs ->
         let msgs = errs |> List.map (fun (tid, dep) -> tid + " dependsOn unknown " + dep)
         sprintf "Dependency error: %s. Fix dependencies." (String.concat "; " msgs)

@@ -14,10 +14,12 @@ let entries () : (string * (unit -> unit)) list = [
         equal "s1" d2.SessionId
         equal "req" d2.RootRequirement)
 
-    ("Event.fold TaskCreated", fun () ->
+    ("Event.fold TasksCreated", fun () ->
         let d = empty "s1" ""
-        let d2 = foldEvent d (TaskCreated ("s1", "a", "t", "d", []))
-        equal Pending (findTask "a" d2).Value.Status)
+        let d2 = foldEvent d (TasksCreated ("s1", [("a", "t", "d", []); ("b", "u", "e", ["a"])]))
+        equal Pending (findTask "a" d2).Value.Status
+        equal Pending (findTask "b" d2).Value.Status
+        equal ["a"] (findTask "b" d2).Value.DependsOn)
 
     ("Event.fold TaskStarted", fun () ->
         let d = empty "s1" "" |> addTask (t "a" "t" "d" [] "now")
@@ -51,7 +53,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Event.foldEvents sequence", fun () ->
         let events = [
-            TaskCreated ("s1", "a", "t", "d", [])
+            TasksCreated ("s1", [("a", "t", "d", [])])
             TaskStarted ("s1", "a", "/wt", "a")
             TaskSubmitted ("s1", "a", "sha")
             TaskMerged ("s1", "a", "sha")

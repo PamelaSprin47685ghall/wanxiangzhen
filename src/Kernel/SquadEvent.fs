@@ -5,7 +5,7 @@ open Wanxiangzhen.Kernel.Dag
 
 type SquadEvent =
     | SquadCreated of sessionId: string * requirement: string
-    | TaskCreated of sessionId: string * taskId: string * title: string * description: string * dependsOn: string list
+    | TasksCreated of sessionId: string * tasks: (string * string * string * string list) list
     | TaskStarted of sessionId: string * taskId: string * worktreePath: string * branchName: string
     | TaskSubmitted of sessionId: string * taskId: string * commitSha: string
     | TaskMerged of sessionId: string * taskId: string * masterSha: string
@@ -15,7 +15,7 @@ type SquadEvent =
 let eventSessionId (e: SquadEvent) : string =
     match e with
     | SquadCreated (sid, _)
-    | TaskCreated (sid, _, _, _, _)
+    | TasksCreated (sid, _)
     | TaskStarted (sid, _, _, _)
     | TaskSubmitted (sid, _, _)
     | TaskMerged (sid, _, _)
@@ -25,7 +25,7 @@ let eventSessionId (e: SquadEvent) : string =
 let eventTypeName (e: SquadEvent) : string =
     match e with
     | SquadCreated _ -> "squad_created"
-    | TaskCreated _ -> "task_created"
+    | TasksCreated _ -> "tasks_created"
     | TaskStarted _ -> "task_started"
     | TaskSubmitted _ -> "task_submitted"
     | TaskMerged _ -> "task_merged"
@@ -34,7 +34,7 @@ let eventTypeName (e: SquadEvent) : string =
 
 let eventTypeNameFromString (s: string) : string option =
     match s with
-    | "squad_created" | "task_created" | "task_started" | "task_submitted"
+    | "squad_created" | "tasks_created" | "task_started" | "task_submitted"
     | "task_merged" | "task_done" | "squad_cancelled" -> Some s
     | _ -> None
 
@@ -47,8 +47,9 @@ let eventProse (e: SquadEvent) : string =
          - Minimize file conflicts with other tasks\n\
          Express dependencies via dependsOn (dependency must be merged first).\n\
          Call the squad_update tool with an events array containing all task_created events."
-    | TaskCreated (_, _, title, _, _) ->
-        sprintf "Task '%s' created. Nothing needs to be done. The scheduler will start it once dependencies are merged." title
+    | TasksCreated (_, tasks) ->
+        let count = List.length tasks
+        sprintf "%d tasks created. Nothing needs to be done. The scheduler will start them as dependencies are met." count
     | TaskStarted (_, _, _, _) -> "Task started in worktree. Nothing needs to be done."
     | TaskSubmitted (_, _, _) -> "Task submitted for fast-forward check. Nothing needs to be done."
     | TaskMerged (_, _, sha) -> sprintf "Task merged into master @ %s. Nothing needs to be done." sha
@@ -60,9 +61,10 @@ let eventProse (e: SquadEvent) : string =
 let foldEvent (dag: Dag) (e: SquadEvent) : Dag =
     match e with
     | SquadCreated (sid, req) -> { dag with SessionId = sid; RootRequirement = req }
-    | TaskCreated (_, tid, title, desc, deps) ->
-        let t = Wanxiangzhen.Kernel.Task.create tid title desc deps ""
-        addTask t dag
+    | TasksCreated (_, tasks) ->
+        tasks |> List.fold (fun d (tid, title, desc, deps) ->
+            let t = Wanxiangzhen.Kernel.Task.create tid title desc deps ""
+            addTask t d) dag
     | TaskStarted (_, tid, wt, branch) ->
         dag |> updateTask tid (fun t ->
             { t with Status = Running; WorktreePath = Some wt; BranchName = Some branch })

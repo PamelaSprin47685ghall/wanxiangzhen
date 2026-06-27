@@ -48,7 +48,7 @@ let readAllTexts (client: obj) (sessionId: string) (directory: string) : JS.Prom
                                 (parts :?> obj array) |> Array.toList
                                 |> List.collect (fun part ->
                                     let ty = str part "type"
-                                    if ty = "text" then [ str part "text" ] else []))
+                                    if ty = "text" || ty = "tool_result" then [ str part "text" ] else []))
         with _ -> return []
     }
 

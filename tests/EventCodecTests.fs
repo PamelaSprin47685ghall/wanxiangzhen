@@ -5,13 +5,16 @@ open Wanxiangzhen.Shell.EventCodec
 open Wanxiangzhen.Tests.Assert
 
 let entries () : (string * (unit -> unit)) list = [
-    ("Codec.TaskCreated round-trip", fun () ->
-        let encoded = encodeEvent (TaskCreated ("s1", "a1", "title", "desc", []))
+    ("Codec.TasksCreated round-trip", fun () ->
+        let tasks = [("a1", "title1", "desc1", []); ("a2", "title2", "desc2", ["a1"])]
+        let encoded = encodeEvent (TasksCreated ("s1", tasks))
         check (encoded.StartsWith "---")
         match decodeEvent encoded with
-        | Some (TaskCreated (_, tid, title, _, deps)) ->
-            equal "a1" tid
-            equal "title" title
+        | Some (TasksCreated (_, decoded)) ->
+            equal 2 decoded.Length
+            equal "a1" (decoded.[0] |> fun (id,_,_,_) -> id)
+            equal "title1" (decoded.[0] |> fun (_,t,_,_) -> t)
+            equal ["a1"] (decoded.[1] |> fun (_,_,_,d) -> d)
         | _ -> check false)
 
     ("Codec.TaskMerged round-trip", fun () ->
@@ -19,13 +22,6 @@ let entries () : (string * (unit -> unit)) list = [
         match decodeEvent encoded with
         | Some (TaskMerged (_, _, sha)) ->
             equal "sha123" sha
-        | _ -> check false)
-
-    ("Codec.TaskCreated with deps", fun () ->
-        let encoded = encodeEvent (TaskCreated ("s1", "a1", "t", "d", ["b1"; "c1"]))
-        match decodeEvent encoded with
-        | Some (TaskCreated (_, _, _, _, deps)) ->
-            equal ["b1"; "c1"] deps
         | _ -> check false)
 
     ("Codec.no frontmatter", fun () ->
@@ -83,16 +79,8 @@ let entries () : (string * (unit -> unit)) list = [
             equal "s1" sid
         | _ -> check false)
 
-    ("Codec.TaskCreated with description", fun () ->
-        let encoded = encodeEvent (TaskCreated ("s1", "t1", "my title", "full description here", []))
-        match decodeEvent encoded with
-        | Some (TaskCreated (_, _, _, desc, deps)) ->
-            equal "full description here" desc
-            equal [] deps
-        | _ -> check false)
-
     ("Codec.corrupted frontmatter no trailing ---", fun () ->
-        isNone (decodeEvent "---\nsquad_event: task_created\nsession_id: s1"))
+        isNone (decodeEvent "---\nsquad_event: tasks_created\nsession_id: s1"))
 
     ("Codec.TaskMerged prose includes sha", fun () ->
         let prose = eventProse (TaskMerged ("s1", "t1", "sha999"))
