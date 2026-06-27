@@ -6,25 +6,21 @@ open Wanxiangzhen.Shell.Dyn
 [<Import("spawnSync", "node:child_process")>]
 let private spawnSync (cmd: string) (args: obj) (opts: obj) : obj = jsNative
 
+let private readResult (x: obj) (k: string) : string =
+    let v = get x k
+    if isNullish v then "" else string v
+
 let private runStdout (cwd: string) (args: string array) : string =
     let result = spawnSync "git" (box args) (box {| cwd = cwd; encoding = "utf-8" |})
-    let status = unbox<int> (result?(status))
-    if status <> 0 then
-        let stderr = string (result?(stderr) |> (fun o -> if isNullish o then "" else o))
-        failwith stderr
-    else
-        let stdout = result?(stdout)
-        string (if isNullish stdout then "" else stdout) |> (fun s -> s.TrimEnd())
+    let st = unbox<int> (get result "status")
+    if st <> 0 then failwith (readResult result "stderr")
+    else (readResult result "stdout").TrimEnd()
 
 let tryRun (cwd: string) (args: string array) : Result<string, string> =
     let result = spawnSync "git" (box args) (box {| cwd = cwd; encoding = "utf-8" |})
-    let status = unbox<int> (result?(status))
-    if status <> 0 then
-        let stderr = result?(stderr)
-        Error (string (if isNullish stderr then "" else stderr) |> (fun s -> s.TrimEnd()))
-    else
-        let stdout = result?(stdout)
-        Ok (string (if isNullish stdout then "" else stdout) |> (fun s -> s.TrimEnd()))
+    let st = unbox<int> (get result "status")
+    if st <> 0 then Error ((readResult result "stderr").TrimEnd())
+    else Ok ((readResult result "stdout").TrimEnd())
 
 let tryWorktreeAdd (cwd: string) (branch: string) (path: string) (baseBranch: string) : Result<string, string> =
     tryRun cwd [| "worktree"; "add"; "-b"; branch; path; baseBranch |]
