@@ -20,10 +20,15 @@ let reset () =
 
 let private pass () = passCount <- passCount + 1
 
-let private recordFailure () =
+let recordFailure () =
     failureCount <- failureCount + 1
     failureLabels <- currentLabel :: failureLabels
     console?error ("FAIL: " + currentLabel) |> ignore
+
+let recordException (msg: string) =
+    failureCount <- failureCount + 1
+    failureLabels <- currentLabel :: failureLabels
+    console?error ("FAIL: " + currentLabel + " -- " + msg) |> ignore
 
 let check (cond: bool) = if cond then pass () else recordFailure ()
 let equal (expected: 'a) (actual: 'a) = check (expected = actual)

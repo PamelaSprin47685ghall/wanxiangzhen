@@ -23,20 +23,30 @@ let private allSyncTests : (string * (unit -> unit)) list =
     @ Wanxiangzhen.Tests.PidMonitorTests.entries ()
     @ Wanxiangzhen.Tests.SerialQueueTests.entries ()
     @ Wanxiangzhen.Tests.SlaveRuntimeTests.entries ()
-    @ Wanxiangzhen.Tests.CoordinatorLifecycleTests.entries ()
     @ Wanxiangzhen.Tests.PluginTests.entries ()
     @ Wanxiangzhen.Tests.ExtendedCoordinatorOpsTests.entries ()
     @ Wanxiangzhen.Tests.GitShellTests.entries ()
     @ Wanxiangzhen.Tests.ConfigReaderTests.entries ()
     @ Wanxiangzhen.Tests.SessionIoTests.entries ()
 
+let private allAsyncTests : (string * (unit -> JS.Promise<unit>)) list =
+    Wanxiangzhen.Tests.CoordinatorLifecycleTests.entries ()
+    @ Wanxiangzhen.Tests.MockE2eTests.entriesAsync ()
+
 let runAll (_args: string array) : JS.Promise<int> =
     promise {
         reset ()
+        // synchronous tests
         for (label, body) in allSyncTests do
             setCurrentLabel label
             try body ()
-            with ex -> console?error(sprintf "EXCEPTION in %s: %s" label (string ex)) |> ignore
+            with ex -> recordException (sprintf "EXCEPTION in %s: %s" label (string ex))
+        // asynchronous mock e2e tests — 顺序 await
+        for (label, body) in allAsyncTests do
+            setCurrentLabel label
+            try
+                do! body ()
+            with ex -> recordException (sprintf "ASYNC EXCEPTION in %s: %s" label (string ex))
         return summary ()
     }
 

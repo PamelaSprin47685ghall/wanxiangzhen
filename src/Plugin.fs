@@ -58,8 +58,7 @@ let private squadUpdateToolDef (rt: CoordinatorRuntime) : obj =
     let executeDef = createObj [
         "description", box "Submit task decomposition or status update for the current squad session."
         "args", box args
-        "execute", box (fun (a: obj) ->
-            promise { return handleSquadUpdate rt a } : JS.Promise<string>)
+        "execute", box (fun (a: obj) -> handleSquadUpdate rt a)
     ]
     createObj [ "squad_update", box executeDef ]
 
@@ -75,7 +74,7 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
             let requirement = str input "arguments"
             if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
                 rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
-            let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
+            let newSid = "squad-session-" + (rt.Deps.Now ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
             rt.Dag <- empty newSid requirement
             let evt = SquadCreated (newSid, requirement)
             let part = box {| ``type`` = "text"; text = encodeEvent evt |}
@@ -113,7 +112,7 @@ let private coordinatorPlugin (ctx: obj) : JS.Promise<obj> =
             handleCommandExecuteBefore rt input output))
         setKey result "dispose" (box (fun () ->
             rt.Server.Close ()
-            rt.PidPollHandle |> Option.iter stopPolling))
+            rt.PidPollHandle |> Option.iter rt.Deps.StopPolling))
         return result
     }
 

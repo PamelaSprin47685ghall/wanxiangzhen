@@ -23,6 +23,9 @@ open Wanxiangzhen.Shell.SymlinkShell
 open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
 
+[<Global("process")>]
+let private nodeProcess : obj = jsNative
+
 let internal extractTaskId (path: string) (suffix: string) : string =
     let prefix = "/task/"
     let suf = "/" + suffix
@@ -33,12 +36,12 @@ let internal extractTaskId (path: string) (suffix: string) : string =
 let formatDagText (rt: CoordinatorRuntime) : string =
     Wanxiangzhen.Kernel.Dag.formatDag rt.Dag
 
-let rec private resolveBranchName (rt: CoordinatorRuntime) (hexPart: string) (attempts: int) : string =
-    let candidate = "worktree-" + hexPart
+let rec private resolveBranchName (rt: CoordinatorRuntime) (taskId: string) (attempts: int) : string =
+    let candidate = taskId
     if attempts <= 0 then candidate
-    elif showRefExists rt.ProjectRoot candidate then
+    elif rt.Deps.ShowRefExists rt.ProjectRoot candidate then
         let suffix = (generateTaskId ()).Substring 6
-        resolveBranchName rt (hexPart + "-" + suffix) (attempts - 1)
+        resolveBranchName rt (taskId + "-" + suffix) (attempts - 1)
     else candidate
 
 let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
@@ -49,18 +52,15 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
             let parent =
                 let lastSlash = rt.ProjectRoot.LastIndexOf '/'
                 rt.ProjectRoot.Substring(0, lastSlash + 1)
-            let hexPart = if taskId.StartsWith "squad-" then taskId.Substring 6 else taskId
-            let branchName = resolveBranchName rt hexPart 5
-            let hexPartActual =
-                if branchName.StartsWith "worktree-" then branchName.Substring 9 else hexPart
-            let wtPath = parent + "worktree-" + hexPartActual
-            match tryWorktreeAdd rt.ProjectRoot branchName wtPath rt.MasterBranch with
+            let branchName = resolveBranchName rt taskId 5
+            let wtPath = parent + "worktree-" + branchName
+            match rt.Deps.TryWorktreeAdd rt.ProjectRoot branchName wtPath rt.MasterBranch with
             | Error e ->
                 injectEventFire rt (TaskError (rt.Dag.SessionId, taskId, e))
                 return ()
             | Ok _ ->
-                createSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
-                let vibeFs = detectVibeFs rt.ProjectRoot
+                rt.Deps.CreateSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
+                let vibeFs = rt.Deps.DetectVibeFs rt.ProjectRoot
                 let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch vibeFs
                 let slaveEnv = createObj []
                 assignInto slaveEnv (get nodeProcess "env") |> ignore
@@ -70,14 +70,14 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
                 setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
                 setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
                 if vibeFs then setKey slaveEnv "SQUAD_VIBEFS" (box "1")
-                spawnSlave rt.Config.Terminal wtPath slaveEnv prompt
-                let now = nowUtc ()
+                rt.Deps.SpawnSlave rt.Config.Terminal wtPath slaveEnv prompt
+                let now = rt.Deps.Now ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
                     { (withStatus t Running now) with
                          WorktreePath = Some wtPath
                          BranchName = Some branchName })
                 injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, branchName))
-    }
+        }
 
 let schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
     if rt.Scheduling then Promise.lift ()
@@ -98,7 +98,7 @@ let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit>
         | None -> return ()
         | Some task when isTerminal task.Status -> return ()
         | Some task ->
-            let now = nowUtc ()
+            let now = rt.Deps.Now ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
             injectEventFire rt (TaskDone (rt.Dag.SessionId, taskId, false))
             cleanupTask rt task
@@ -115,29 +115,29 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
     | Some task ->
         let branchName = task.BranchName |> Option.defaultValue taskId
         promise {
-            let now = nowUtc ()
+            let now = rt.Deps.Now ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Submitted now)
             injectEventFire rt (TaskSubmitted (rt.Dag.SessionId, taskId, reportedSha))
             let! result =
                 rt.GitQueue.Enqueue(fun () ->
                     promise {
-                        let branchSha = revParseRef rt.ProjectRoot branchName
+                        let branchSha = rt.Deps.RevParseRef rt.ProjectRoot branchName
                         if branchSha <> reportedSha then return StaleCommit
                         else
-                            let cur = revParseBranch rt.ProjectRoot
+                            let cur = rt.Deps.RevParseBranch rt.ProjectRoot
                             if cur <> rt.MasterBranch then
                                 return CoordinatorNotReady "not_on_master"
-                            elif not (statusIsClean rt.ProjectRoot) then
+                            elif not (rt.Deps.StatusIsClean rt.ProjectRoot) then
                                 return CoordinatorNotReady "dirty"
-                            elif mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch branchName then
-                                let sha = mergeFfOnly rt.ProjectRoot branchName
+                            elif rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch branchName then
+                                let sha = rt.Deps.MergeFfOnly rt.ProjectRoot branchName
                                 return Merged sha
                             else
-                                let sha = revParseRef rt.ProjectRoot rt.MasterBranch
+                                let sha = rt.Deps.RevParseRef rt.ProjectRoot rt.MasterBranch
                                 return RebaseNeeded sha })
             match result with
             | Merged sha ->
-                let n2 = nowUtc ()
+                let n2 = rt.Deps.Now ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
                     { (withStatus t TaskStatus.Merged n2) with MergedSha = Some sha })
                 injectEventFire rt (TaskMerged (rt.Dag.SessionId, taskId, sha))
@@ -145,14 +145,14 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                 | Some t ->
                     match t.SlavePid with
                     | Some pid ->
-                        killPid pid (box "SIGTERM")
-                        do! waitForPidDeath pid 5
+                        rt.Deps.KillPid pid (box "SIGTERM")
+                        do! rt.Deps.WaitForPidDeath pid 5
                     | None -> ()
                     cleanupTask rt t
                 | None -> ()
                 do! schedulerTick rt
             | _ ->
-                let n2 = nowUtc ()
+                let n2 = rt.Deps.Now ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Running n2)
                 do! schedulerTick rt
             return { StatusCode = 200; Body = encodeFfResponseBody result }
@@ -195,7 +195,7 @@ let routeHandler (rt: CoordinatorRuntime) : RouteHandler =
 
 let startPidPolling (rt: CoordinatorRuntime) : unit =
     rt.PidPollHandle <-
-        Some (startPolling 2000 (fun () ->
+        Some (rt.Deps.StartPolling 2000 (fun () ->
             promise {
                 let toCheck =
                     rt.Dag.Tasks |> Map.toList |> List.map snd
@@ -203,9 +203,9 @@ let startPidPolling (rt: CoordinatorRuntime) : unit =
                         (t.Status = Running || t.Status = Submitted) && t.SlavePid.IsSome)
                 for t in toCheck do
                     match t.SlavePid with
-                    | Some pid when not (isPidAlive pid) -> do! handleSlaveExit rt t.Id
-                    | Some pid when isPidAlive pid ->
-                        let now = nowUtc ()
+                    | Some pid when not (rt.Deps.IsPidAlive pid) -> do! handleSlaveExit rt t.Id
+                    | Some pid when rt.Deps.IsPidAlive pid ->
+                        let now = rt.Deps.Now ()
                         rt.Dag <- rt.Dag |> updateTask t.Id (fun x -> { x with LastHeartbeatAt = Some now })
                     | _ -> ()
             } |> Promise.start))

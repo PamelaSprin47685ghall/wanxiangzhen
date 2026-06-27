@@ -2,29 +2,16 @@ module Wanxiangzhen.Tests.ExtendedCoordinatorOpsTests
 
 open Fable.Core
 open Fable.Core.JsInterop
-open Wanxiangzhen.Kernel.Task
 open Wanxiangzhen.Kernel.Dag
-open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
+open Wanxiangzhen.Shell.SerialQueue
 open Wanxiangzhen.Shell.CoordinatorOps
 open Wanxiangzhen.Tests.Assert
+open Wanxiangzhen.Tests.TestFixtures
 
-let private mkRuntime () : CoordinatorRuntime =
-    { Dag = Wanxiangzhen.Kernel.Dag.empty "" ""
-      Sessions = Map.empty
-      Config = Wanxiangzhen.Kernel.SquadConfig.defaults
-      MasterBranch = "main"
-      ProjectRoot = "/tmp"
-      MasterSessionId = ""
-      Client = createObj []
-      Token = "t"
-      CoordinatorUrl = "http://l:0"
-      GitQueue = Wanxiangzhen.Shell.SerialQueue.SerialQueue ()
-      InjectQueue = Wanxiangzhen.Shell.SerialQueue.SerialQueue ()
-      Server = { Port = 0; Url = ""; Close = fun () -> () }
-      Scheduling = false
-      PidPollHandle = None
-      GitError = None }
+// ══════════════════════════════════════════════════════════════════════════════
+// Tests — pure CoordinatorOps unit tests, no git/spawn/session paths exercised
+// ══════════════════════════════════════════════════════════════════════════════
 
 let entries () : (string * (unit -> unit)) list = [
     ("extractTaskId returns id for submit path", fun () ->
