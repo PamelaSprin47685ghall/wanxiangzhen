@@ -24,7 +24,7 @@ open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.StateBackup
 
-let private extractTaskId (path: string) (suffix: string) : string =
+let internal extractTaskId (path: string) (suffix: string) : string =
     let prefix = "/task/"
     let suf = "/" + suffix
     if path.StartsWith prefix && path.EndsWith suf then
@@ -150,9 +150,8 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
         }
 
 let routeHandler (rt: CoordinatorRuntime) : RouteHandler =
-    fun method path bodyStr ->
+    fun method path body ->
         promise {
-            let body = if bodyStr = "" then box null else bodyStr |> box
             match method, path with
             | "POST", p when p.EndsWith "/submit" ->
                 let tid = extractTaskId p "submit"

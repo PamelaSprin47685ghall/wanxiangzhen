@@ -34,7 +34,8 @@ let private squadDir (rt: CoordinatorRuntime) : string = rt.ProjectRoot + "/.squ
 
 let saveState (rt: CoordinatorRuntime) : unit =
     try
-        mkdirSync (squadDir rt)
+        let dir = squadDir rt
+        if not (existsSync dir) then mkdirSync dir
         let tasks =
             rt.Dag.Tasks |> Map.toList |> List.map snd
             |> List.map (fun t ->

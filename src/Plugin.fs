@@ -69,19 +69,24 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
         let command = str input "command"
         match command with
         | "squad" ->
-            let sessionId = str input "sessionID"
-            if sessionId <> "" && rt.MasterSessionId = "" then
-                rt.MasterSessionId <- sessionId
-                do! replayFromHistory rt
-            let requirement = str input "arguments"
-            if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
-                rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
-            let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
-            rt.Dag <- empty newSid requirement
-            saveState rt
-            let evt = SquadCreated (newSid, requirement)
-            let part = box {| ``type`` = "text"; text = encodeEvent evt |}
-            mutateOutputParts output part
+            match rt.GitError with
+            | Some err ->
+                let part = box {| ``type`` = "text"; text = "Error: " + err |}
+                mutateOutputParts output part
+            | None ->
+                let sessionId = str input "sessionID"
+                if sessionId <> "" && rt.MasterSessionId = "" then
+                    rt.MasterSessionId <- sessionId
+                    do! replayFromHistory rt
+                let requirement = str input "arguments"
+                if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
+                    rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
+                let newSid = "squad-session-" + (nowUtc ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
+                rt.Dag <- empty newSid requirement
+                saveState rt
+                let evt = SquadCreated (newSid, requirement)
+                let part = box {| ``type`` = "text"; text = encodeEvent evt |}
+                mutateOutputParts output part
         | "squad-kill" ->
             let args = str input "arguments"
             let sidOpt = if args = "" then None else Some args

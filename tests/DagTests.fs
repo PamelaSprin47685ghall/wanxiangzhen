@@ -78,4 +78,42 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dag.detectCycle mutual", fun () ->
         isSome (detectCycle [("a", ["b"]); ("b", ["a"])]))
+
+    ("formatDag shows sessionId", fun () ->
+        let d = empty "squad-session-001" "req"
+        let s = formatDag d
+        check (s.Contains "squad-session-001"))
+
+    ("formatDag shows (no tasks) when empty", fun () ->
+        let d = empty "s1" ""
+        let s = formatDag d
+        check (s.Contains "(no tasks)"))
+
+    ("formatDag shows task line with id/status for single task", fun () ->
+        let d = empty "s1" "" |> addTask (mkTask "squad-a1b2" [] Pending)
+        let s = formatDag d
+        check (s.Contains "squad-a1b2")
+        check (s.Contains "pending"))
+
+    ("formatDag shows deps when present", fun () ->
+        let d = empty "s1" ""
+                |> addTask (mkTask "squad-a1b2" ["squad-x9y8"] Pending)
+        let s = formatDag d
+        check (s.Contains "squad-x9y8"))
+
+    ("formatSquadUpdateOutcome Success", fun () ->
+        let s = formatSquadUpdateOutcome (Success 3)
+        equal "3 tasks created, scheduler notified." s)
+
+    ("formatSquadUpdateOutcome DependencyErrors", fun () ->
+        let s = formatSquadUpdateOutcome (DependencyErrors [("squad-a1b2", "squad-zzzz")])
+        check (s.Contains "squad-a1b2 dependsOn unknown squad-zzzz"))
+
+    ("formatSquadUpdateOutcome CycleDetected", fun () ->
+        let s = formatSquadUpdateOutcome (CycleDetected ["squad-x"; "squad-y"; "squad-x"])
+        equal "Dependency cycle detected: squad-x → squad-y → squad-x. Please re-decompose without cycles." s)
+
+    ("formatSquadUpdateOutcome InvalidInput", fun () ->
+        let s = formatSquadUpdateOutcome (InvalidInput "bad input")
+        equal "Error: bad input" s)
 ]

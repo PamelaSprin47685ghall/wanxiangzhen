@@ -46,6 +46,7 @@ type CoordinatorRuntime = {
     Server: StartedServer
     mutable Scheduling: bool
     mutable PidPollHandle: obj option
+    mutable GitError: string option
 }
 
 let rec private tryPromptWithRetry (client: obj) (sessionId: string) (msg: string) (delay: int) (remaining: int) : JS.Promise<unit> =

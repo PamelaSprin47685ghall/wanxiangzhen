@@ -13,9 +13,10 @@ let private fmKey (e: SquadEvent) =
         "session_id",  box (eventSessionId e)
     ]
     match e with
-    | TaskCreated (_, tid, title, _, deps) ->
+    | TaskCreated (_, tid, title, desc, deps) ->
         setKey o "task_id" (box tid)
         setKey o "title" (box title)
+        setKey o "description" (box desc)
         if deps <> [] then setKey o "depends_on" (box (List.toArray deps))
     | TaskStarted (_, tid, wt, branch) ->
         setKey o "task_id" (box tid)

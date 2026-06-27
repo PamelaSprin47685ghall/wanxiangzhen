@@ -15,7 +15,7 @@ type HttpResponse = {
     Body: obj
 }
 
-type RouteHandler = string -> string -> string -> JS.Promise<HttpResponse>
+type RouteHandler = string -> string -> obj -> JS.Promise<HttpResponse>
 
 let private readBody (req: obj) : JS.Promise<string> =
     Promise.create (fun resolve reject ->
@@ -58,7 +58,7 @@ let startServer (token: string) (handler: RouteHandler) : JS.Promise<StartedServ
                         let! body = readBody req
                         try
                             let parsed = if body = "" then box null else JSON?parse(body)
-                            let! reply = handler method url (string parsed)
+                            let! reply = handler method url parsed
                             writeResponse res reply.StatusCode reply.Body
                         with ex ->
                             writeResponse res 400 (box {| result = "bad_request"; error = string ex.Message |})

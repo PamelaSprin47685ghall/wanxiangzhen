@@ -37,6 +37,23 @@
     <Compile Include="tests/EventCodecTests.fs" />
     <Compile Include="tests/FfDecisionTests.fs" />
     <Compile Include="tests/CommandHookTests.fs" />
+    <Compile Include="tests/DynTests.fs" />
+    <Compile Include="tests/SerialQueueTests.fs" />
+    <Compile Include="tests/HttpCodecTests.fs" />
+    <Compile Include="tests/SquadConfigTests.fs" />
+    <Compile Include="tests/SquadPromptsTests.fs" />
+    <Compile Include="tests/StateBackupTests.fs" />
+    <Compile Include="tests/SlaveSpawnTests.fs" />
+    <Compile Include="tests/SlaveRuntimeTests.fs" />
+    <Compile Include="tests/CoordinatorOpsTests.fs" />
+    <Compile Include="tests/ExtendedFfDecisionTests.fs" />
+    <Compile Include="tests/CoordinatorLifecycleTests.fs" />
+    <Compile Include="tests/PluginTests.fs" />
+    <Compile Include="tests/ExtendedCoordinatorOpsTests.fs" />
+    <Compile Include="tests/GitShellTests.fs" />
+    <Compile Include="tests/ConfigReaderTests.fs" />
+    <Compile Include="tests/SessionIoTests.fs" />
+    <Compile Include="tests/PidMonitorTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>

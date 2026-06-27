@@ -73,4 +73,19 @@ let entries () : (string * (unit -> unit)) list = [
         let t2 = withReconciledStatus t Merged "later"
         equal Merged t2.Status
         equal "later" t2.UpdatedAt)
+
+    ("Task.taskIdPrefix is squad-", fun () ->
+        equal "squad-" taskIdPrefix)
+
+    ("Task.create always generates Pending", fun () ->
+        let t = create "squad-a1b2" "title" "desc" [] "2024-01-01"
+        equal Pending t.Status)
+
+    ("Task.withStatus throws on invalid transition", fun () ->
+        let t = create "t1" "t" "d" [] "now"
+        try 
+            withStatus t Merged "later" |> ignore
+            check false
+        with :? System.Exception -> 
+            check true)
 ]

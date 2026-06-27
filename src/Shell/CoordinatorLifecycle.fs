@@ -28,15 +28,39 @@ let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
         else
             let! texts = readAllTexts rt.Client rt.MasterSessionId ""
             let events = texts |> List.choose decodeEvent
-            rt.Dag <- foldEvents events rt.Dag
-            for t in rt.Dag.Tasks |> Map.toList |> List.map snd do
-                if t.Status = Submitted || t.Status = Running then
-                    match t.BranchName with
-                    | Some b when mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
-                        let sha = revParseRef rt.ProjectRoot rt.MasterBranch
-                        rt.Dag <- rt.Dag |> updateTask t.Id (fun x ->
-                            { (withReconciledStatus x TaskStatus.Merged (nowUtc ())) with MergedSha = Some sha })
-                    | _ -> ()
+            let mutable currentDag = empty "" ""
+            let mutable sessions = Map.empty
+            for ev in events do
+                match ev with
+                | SquadCreated (sid, req) ->
+                    if currentDag.SessionId <> "" && not currentDag.Tasks.IsEmpty then
+                        sessions <- sessions.Add(currentDag.SessionId, currentDag)
+                    currentDag <- empty sid req
+                | _ ->
+                    currentDag <- foldEvent currentDag ev
+            
+            let reconciledTasks =
+                currentDag.Tasks |> Map.map (fun _ t ->
+                    if t.Status = Submitted || t.Status = Running then
+                        match rt.GitError with
+                        | Some _ ->
+                            if t.Status = Submitted then
+                                withReconciledStatus t TaskStatus.Running (nowUtc ())
+                            else t
+                        | None ->
+                            match t.BranchName with
+                            | Some b when mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
+                                let sha = revParseRef rt.ProjectRoot rt.MasterBranch
+                                { (withReconciledStatus t TaskStatus.Merged (nowUtc ())) with MergedSha = Some sha }
+                            | _ ->
+                                if t.Status = Submitted then
+                                    withReconciledStatus t TaskStatus.Running (nowUtc ())
+                                else t
+                    else t)
+            
+            rt.Dag <- { currentDag with Tasks = reconciledTasks }
+            rt.Sessions <- sessions
+
             let orphans =
                 rt.Dag.Tasks |> Map.toList |> List.map snd
                 |> List.filter (fun t -> t.Status = Running && t.SlavePid.IsNone)
@@ -111,7 +135,10 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
                      |> List.map (fun d -> id, d))
         if dangling <> [] then formatSquadUpdateOutcome (DependencyErrors dangling)
         else
-            match detectCycle depsList with
+            let fullDepsList =
+                let existingDeps = rt.Dag.Tasks |> Map.toList |> List.map (fun (id, t) -> id, t.DependsOn)
+                existingDeps @ depsList
+            match detectCycle fullDepsList with
             | Some cycle -> formatSquadUpdateOutcome (CycleDetected cycle)
             | None ->
                 let now = nowUtc ()
@@ -129,10 +156,17 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : string =
 let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
     promise {
         let config = readConfig directory
-        let mb =
+        let mb, gitError =
             match config.MasterBranch with
-            | Some b -> b
-            | None -> if isDetached directory then failwith "Detached HEAD detected. Please configure squad.masterBranch in AGENTS.md frontmatter." else revParseBranch directory
+            | Some b -> b, None
+            | None ->
+                try
+                    if isDetached directory then
+                        "master", Some "Detached HEAD detected. Please configure squad.masterBranch in AGENTS.md frontmatter."
+                    else
+                        revParseBranch directory, None
+                with ex ->
+                    "master", Some (string ex.Message)
         let token =
             let hex = "0123456789abcdef"
             System.String([| for _ in 0..31 -> hex[int (JS.Math.random () * 16.0)] |])
@@ -161,6 +195,7 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             Server = server
             Scheduling = false
             PidPollHandle = None
+            GitError = gitError
         }
         rtRef.Value <- Some runtime
         startPidPolling runtime
