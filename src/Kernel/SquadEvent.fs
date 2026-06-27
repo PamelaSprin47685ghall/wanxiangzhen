@@ -10,6 +10,7 @@ type SquadEvent =
     | TaskSubmitted of sessionId: string * taskId: string * commitSha: string
     | TaskMerged of sessionId: string * taskId: string * masterSha: string
     | TaskDone of sessionId: string * taskId: string * merged: bool
+    | TaskError of sessionId: string * taskId: string * error: string
     | SquadCancelled of sessionId: string
 
 let eventSessionId (e: SquadEvent) : string =
@@ -20,6 +21,7 @@ let eventSessionId (e: SquadEvent) : string =
     | TaskSubmitted (sid, _, _)
     | TaskMerged (sid, _, _)
     | TaskDone (sid, _, _)
+    | TaskError (sid, _, _)
     | SquadCancelled sid -> sid
 
 let eventTypeName (e: SquadEvent) : string =
@@ -30,12 +32,13 @@ let eventTypeName (e: SquadEvent) : string =
     | TaskSubmitted _ -> "task_submitted"
     | TaskMerged _ -> "task_merged"
     | TaskDone _ -> "task_done"
+    | TaskError _ -> "task_error"
     | SquadCancelled _ -> "squad_cancelled"
 
 let eventTypeNameFromString (s: string) : string option =
     match s with
     | "squad_created" | "tasks_created" | "task_started" | "task_submitted"
-    | "task_merged" | "task_done" | "squad_cancelled" -> Some s
+    | "task_merged" | "task_done" | "task_error" | "squad_cancelled" -> Some s
     | _ -> None
 
 let eventProse (e: SquadEvent) : string =
@@ -56,6 +59,7 @@ let eventProse (e: SquadEvent) : string =
     | TaskDone (_, _, merged) ->
         if merged then "Task slave exited after successful merge."
         else "Task slave exited (not merged). DAG continues."
+    | TaskError (_, _, err) -> sprintf "Git error for task: %s" err
     | SquadCancelled _ -> "Squad session cancelled by user. Remaining tasks marked cancelled."
 
 let foldEvent (dag: Dag) (e: SquadEvent) : Dag =
@@ -74,6 +78,7 @@ let foldEvent (dag: Dag) (e: SquadEvent) : Dag =
         dag |> updateTask tid (fun t -> { t with Status = Merged; MergedSha = Some sha })
     | TaskDone (_, tid, _) ->
         dag |> updateTask tid (fun t -> { t with Status = Done })
+    | TaskError _ -> dag
     | SquadCancelled _ ->
         { dag with Tasks = dag.Tasks |> Map.map (fun _ t -> if isTerminal t.Status then t else { t with Status = Cancelled }) }
 

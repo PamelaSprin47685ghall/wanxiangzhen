@@ -33,6 +33,9 @@ let private fmKey (e: SquadEvent) =
     | TaskDone (_, tid, merged) ->
         setKey o "task_id" (box tid)
         setKey o "merged" (box merged)
+    | TaskError (_, tid, err) ->
+        setKey o "task_id" (box tid)
+        setKey o "error" (box err)
     | SquadCancelled _ -> ()
     | SquadCreated (_, req) -> setKey o "requirement" (box req));
     o
@@ -109,6 +112,10 @@ let decodeEvent (text: string) : SquadEvent option =
                         let tid = strField "task_id" |> Option.defaultValue ""
                         let merged = boolField "merged" |> Option.defaultValue false
                         Some (TaskDone (sid, tid, merged))
+                    | "task_error" ->
+                        let tid = strField "task_id" |> Option.defaultValue ""
+                        let err = strField "error" |> Option.defaultValue ""
+                        Some (TaskError (sid, tid, err))
                     | "squad_cancelled" -> Some (SquadCancelled sid)
                     | _ -> None
             with _ -> None

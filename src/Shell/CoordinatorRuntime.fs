@@ -82,6 +82,12 @@ let rec waitForPidDeath (pid: int) (remaining: int) : JS.Promise<unit> =
 
 let cleanupTask (rt: CoordinatorRuntime) (task: Task) : unit =
     task.WorktreePath |> Option.iter (fun p ->
-        try worktreeRemoveForce rt.ProjectRoot p with _ -> ())
+        match tryWorktreeRemoveForce rt.ProjectRoot p with
+        | Error e when not (e.Contains "does not exist" || e.Contains "not found") ->
+            rt.GitError <- Some e
+        | _ -> ())
     task.BranchName |> Option.iter (fun b ->
-        try branchDeleteForce rt.ProjectRoot b with _ -> ())
+        match tryBranchDeleteForce rt.ProjectRoot b with
+        | Error e when not (e.Contains "not found" || e.Contains "does not exist") ->
+            rt.GitError <- Some e
+        | _ -> ())

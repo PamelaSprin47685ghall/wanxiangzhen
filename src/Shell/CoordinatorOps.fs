@@ -33,6 +33,14 @@ let internal extractTaskId (path: string) (suffix: string) : string =
 let formatDagText (rt: CoordinatorRuntime) : string =
     Wanxiangzhen.Kernel.Dag.formatDag rt.Dag
 
+let rec private resolveBranchName (rt: CoordinatorRuntime) (hexPart: string) (attempts: int) : string =
+    let candidate = "worktree-" + hexPart
+    if attempts <= 0 then candidate
+    elif showRefExists rt.ProjectRoot candidate then
+        let suffix = (generateTaskId ()).Substring 6
+        resolveBranchName rt (hexPart + "-" + suffix) (attempts - 1)
+    else candidate
+
 let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
     promise {
         match findTask taskId rt.Dag with
@@ -41,31 +49,34 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
             let parent =
                 let lastSlash = rt.ProjectRoot.LastIndexOf '/'
                 rt.ProjectRoot.Substring(0, lastSlash + 1)
-            let wtPath = parent + "worktree-" + taskId
-            let worktreeOk =
-                try
-                    worktreeAdd rt.ProjectRoot taskId wtPath rt.MasterBranch
-                    true
-                with _ -> false
-            if not worktreeOk then return ()
-            createSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
-            let vibeFs = detectVibeFs rt.ProjectRoot
-            let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch vibeFs
-            let slaveEnv = createObj []
-            assignInto slaveEnv (get nodeProcess "env") |> ignore
-            setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
-            setKey slaveEnv "SQUAD_TASK_ID" (box taskId)
-            setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
-            setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
-            setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
-            if vibeFs then setKey slaveEnv "SQUAD_VIBEFS" (box "1")
-            spawnSlave rt.Config.Terminal wtPath slaveEnv prompt
-            let now = nowUtc ()
-            rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
-                { (withStatus t Running now) with
-                     WorktreePath = Some wtPath
-                     BranchName = Some taskId })
-            injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, taskId))
+            let hexPart = if taskId.StartsWith "squad-" then taskId.Substring 6 else taskId
+            let branchName = resolveBranchName rt hexPart 5
+            let hexPartActual =
+                if branchName.StartsWith "worktree-" then branchName.Substring 9 else hexPart
+            let wtPath = parent + "worktree-" + hexPartActual
+            match tryWorktreeAdd rt.ProjectRoot branchName wtPath rt.MasterBranch with
+            | Error e ->
+                injectEventFire rt (TaskError (rt.Dag.SessionId, taskId, e))
+                return ()
+            | Ok _ ->
+                createSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
+                let vibeFs = detectVibeFs rt.ProjectRoot
+                let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch vibeFs
+                let slaveEnv = createObj []
+                assignInto slaveEnv (get nodeProcess "env") |> ignore
+                setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
+                setKey slaveEnv "SQUAD_TASK_ID" (box taskId)
+                setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
+                setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
+                setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
+                if vibeFs then setKey slaveEnv "SQUAD_VIBEFS" (box "1")
+                spawnSlave rt.Config.Terminal wtPath slaveEnv prompt
+                let now = nowUtc ()
+                rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
+                    { (withStatus t Running now) with
+                         WorktreePath = Some wtPath
+                         BranchName = Some branchName })
+                injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, branchName))
     }
 
 let schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
@@ -101,7 +112,8 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
     | Some task when task.Status <> Running ->
         Promise.lift { StatusCode = 200
                        Body = encodeFfResponseBody (NotSubmittable (statusToString task.Status)) }
-    | Some _ ->
+    | Some task ->
+        let branchName = task.BranchName |> Option.defaultValue taskId
         promise {
             let now = nowUtc ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Submitted now)
@@ -109,7 +121,7 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
             let! result =
                 rt.GitQueue.Enqueue(fun () ->
                     promise {
-                        let branchSha = revParseRef rt.ProjectRoot taskId
+                        let branchSha = revParseRef rt.ProjectRoot branchName
                         if branchSha <> reportedSha then return StaleCommit
                         else
                             let cur = revParseBranch rt.ProjectRoot
@@ -117,8 +129,8 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                                 return CoordinatorNotReady "not_on_master"
                             elif not (statusIsClean rt.ProjectRoot) then
                                 return CoordinatorNotReady "dirty"
-                            elif mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch taskId then
-                                let sha = mergeFfOnly rt.ProjectRoot taskId
+                            elif mergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch branchName then
+                                let sha = mergeFfOnly rt.ProjectRoot branchName
                                 return Merged sha
                             else
                                 let sha = revParseRef rt.ProjectRoot rt.MasterBranch
