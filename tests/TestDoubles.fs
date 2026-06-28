@@ -16,7 +16,6 @@ type FakeState = {
     revParseBranchResult           : string
     statusClean                    : bool
     mutable createSymlinksCount    : int
-    detectVibeFsResult             : bool
     mutable isPidAliveResult       : bool
     mutable killPidCalled          : bool
     mutable killPidPid             : int option
@@ -51,7 +50,6 @@ type FakeState = {
     mutable startPollingOverride   : (int -> (unit -> unit) -> obj) option
     mutable stopPollingOverride    : (obj -> unit) option
     mutable killPidOverride        : (int -> obj -> unit) option
-    mutable detectVibeFsOverride   : (string -> bool) option
     }
 
 let mkFake () : FakeState =
@@ -63,7 +61,6 @@ let mkFake () : FakeState =
       revParseBranchResult     = "main"
       statusClean              = true
       createSymlinksCount      = 0
-      detectVibeFsResult       = false
       isPidAliveResult         = true
       killPidCalled            = false
       killPidPid               = None
@@ -98,7 +95,7 @@ let mkFake () : FakeState =
       startPollingOverride     = None
       stopPollingOverride      = None
       killPidOverride          = None
-      detectVibeFsOverride     = None }
+      }
 
 let mkDeps (s: FakeState) : CoordinatorDeps =
     { PromptSession        = fun c m p ->
@@ -151,10 +148,6 @@ let mkDeps (s: FakeState) : CoordinatorDeps =
             s.revParseRefOverrides <- s.revParseRefOverrides.Add(s.revParseBranchResult, "merged-sha")
             s.revParseRefResult
       CreateSymlinks       = fun _ _ _ -> s.createSymlinksCount <- s.createSymlinksCount + 1
-      DetectVibeFs         = fun c ->
-            match s.detectVibeFsOverride with
-            | Some f -> f c
-            | None -> s.detectVibeFsResult
       SpawnSlave           = fun t wt e p -> s.spawnSlaveCalls <- s.spawnSlaveCalls @ [(t, wt, e, p)]; s.log.Value <- s.log.Value @ ["spawnSlave"; t]
       IsPidAlive           = fun _ -> s.isPidAliveResult
       KillPid              = fun p signal ->
@@ -191,14 +184,24 @@ let mkRuntime (deps: CoordinatorDeps) : CoordinatorRuntime =
       InjectError  = None
       Deps         = deps }
 
-let mkTaskEvent (taskId:string) (title:string) (desc:string) (deps:string list) : obj =
-    createObj [
-        "type",        box "task_created"
-        "taskId",      box taskId
+let mkTask (taskId:string) (title:string) (desc:string) (deps:string list) : obj =
+    let baseFields = [
         "title",       box title
         "description", box desc
         "dependsOn",   box (Array.ofList deps)
     ]
+    match taskId with
+    | "" -> createObj baseFields
+    | _  -> createObj (("taskId", box taskId) :: baseFields)
+
+let mkTasksCreated (tasks: obj list) : obj =
+    createObj [
+        "type",  box "tasks_created"
+        "tasks", box (Array.ofList tasks)
+    ]
+
+let mkTaskEvent (taskId:string) (title:string) (desc:string) (deps:string list) : obj =
+    mkTasksCreated [ mkTask taskId title desc deps ]
 
 let mkSquadUpdateArgs (events: obj array) : obj =
     createObj [ "events", box events ]

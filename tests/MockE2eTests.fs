@@ -36,7 +36,8 @@ let testHappyPath () : JS.Promise<unit> =
         let evts  = [| TestDoubles.mkTaskEvent "squad-a1b2" "add remember-me" "add remember-me to login" [] |]
         let args  = TestDoubles.mkSquadUpdateArgs evts
         let! reply = handleSquadUpdate rt args
-        check (reply.Contains "squad-a1b2")
+        check (reply.Contains "created")
+        check (reply.Contains "1")
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
         | None -> check false

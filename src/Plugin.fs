@@ -80,11 +80,20 @@ let internal assembleCoordinatorHooks (rt: CoordinatorRuntime) : obj =
                 "items", box (createObj [
                     "type", box "object"
                     "properties", box (createObj [
-                        "type", box (createObj [ "type", box "string"; "enum", box [| "task_created"; "squad_cancelled" |] ])
-                        "taskId", box (createObj [ "type", box "string" ])
-                        "title", box (createObj [ "type", box "string" ])
-                        "description", box (createObj [ "type", box "string" ])
-                        "dependsOn", box (createObj [ "type", box "array"; "items", box (createObj [ "type", box "string" ]) ])
+                        "type", box (createObj [ "type", box "string"; "enum", box [| "tasks_created"; "squad_cancelled" |] ])
+                        "tasks", box (createObj [
+                            "type", box "array"
+                            "items", box (createObj [
+                                "type", box "object"
+                                "properties", box (createObj [
+                                    "taskId", box (createObj [ "type", box "string" ])
+                                    "title", box (createObj [ "type", box "string" ])
+                                    "description", box (createObj [ "type", box "string" ])
+                                    "dependsOn", box (createObj [ "type", box "array"; "items", box (createObj [ "type", box "string" ]) ])
+                                ])
+                                "required", box [| "title"; "description" |]
+                            ])
+                        ])
                     ])
                     "required", box [| "type" |]
                 ])
@@ -163,7 +172,6 @@ let private realCoordinatorDeps () : CoordinatorDeps =
         MergeBaseIsAncestor  = fun _ _ _ -> false
         MergeFfOnly          = fun _ _ -> ""
         CreateSymlinks       = fun _ _ _ -> ()
-        DetectVibeFs         = fun _ -> false
         SpawnSlave           = fun _ _ _ _ -> ()
         IsPidAlive           = fun _ -> false
         KillPid              = fun _ _ -> ()
@@ -185,9 +193,8 @@ let private realCoordinatorDeps () : CoordinatorDeps =
         StatusIsClean        = statusIsClean
         MergeBaseIsAncestor  = mergeBaseIsAncestor
         MergeFfOnly          = mergeFfOnly
-        CreateSymlinks       = createSymlinks
-        DetectVibeFs         = detectVibeFs
-        SpawnSlave           = spawnSlave
+        CreateSymlinks        = createSymlinks
+        SpawnSlave            = spawnSlave
         IsPidAlive           = isPidAlive
         KillPid              = killPid
         WaitForPidDeath      = fun pid r -> waitForPidDeath depsRef.Value pid r

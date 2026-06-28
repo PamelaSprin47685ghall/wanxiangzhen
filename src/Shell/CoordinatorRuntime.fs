@@ -36,7 +36,6 @@ type CoordinatorDeps = {
     MergeBaseIsAncestor : string -> string -> string -> bool
     MergeFfOnly         : string -> string -> string
     CreateSymlinks      : string -> string -> string list -> unit
-    DetectVibeFs        : string -> bool
     SpawnSlave          : string -> string -> obj -> string -> unit
     IsPidAlive          : int -> bool
     KillPid             : int -> obj -> unit

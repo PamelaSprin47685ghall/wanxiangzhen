@@ -27,7 +27,7 @@ let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
         if rt.MasterSessionId = "" then return ()
         else
             let! texts = rt.Deps.ReadAllTexts rt.Client rt.MasterSessionId ""
-            let events = texts |> List.choose decodeEvent
+            let events = texts |> List.collect decodeEvents
             let mutable currentDag = empty "" ""
             let mutable sessions = Map.empty
             for ev in events do
@@ -111,93 +111,118 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : JS.Promise<string> 
             return formatSquadUpdateOutcome (InvalidInput "events must be a non-empty array.")
         else
             let rawEvents = (eventsRaw :?> obj array) |> Array.toList
-            //空字段校验：task_created 必须有非空 title 和 description（不进入 List.map 纯函数体）
-            let invalidTitleDesc =
+
+            // Validation pass 1: every tasks_created entry must have a non-empty tasks[] array
+            let invalidTasksArray =
                 rawEvents |> List.tryFind (fun e ->
-                    let ty = str e "type"
-                    ty = "task_created" &&
-                    (str e "title" = "" || str e "description" = ""))
-            match invalidTitleDesc with
-            | Some badEv ->
-                let badId = let v = get badEv "taskId" in if isNullish v then "<no-id>" else string v
-                return formatSquadUpdateOutcome (InvalidInput (sprintf "task_created '%s' must have non-empty title and description." badId))
+                    str e "type" = "tasks_created" &&
+                    let t = get e "tasks"
+                    isNullish t || not (isArray t))
+            match invalidTasksArray with
+            | Some _ ->
+                return formatSquadUpdateOutcome (InvalidInput "tasks_created must have a non-empty tasks array.")
             | None ->
-                let existingTaskIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
-                let rec genWithRetries (used: Set<string>) (remaining: int) : string option =
-                    if remaining <= 0 then None
+
+            // Validation pass 2: every task inside tasks[] must have non-empty title and description
+            let invalidTask =
+                rawEvents |> List.tryPick (fun e ->
+                    if str e "type" <> "tasks_created" then None
                     else
-                        let cand = generateTaskId ()
-                        let inExisting = Set.contains cand existingTaskIds
-                        let inUsed = Set.contains cand used
-                        let onRef = rt.Deps.ShowRefExists rt.ProjectRoot cand
-                        if inExisting || inUsed || onRef then genWithRetries used (remaining - 1)
-                        else Some cand
-                let rec assignIds (used: Set<string>) (evts: obj list) : (string * string * string * string * string list) list =
-                    match evts with
-                    | [] -> []
-                    | e :: rest ->
-                        let ty = str e "type"
-                        let title = str e "title"
-                        let desc = str e "description"
-                        let depsRaw = get e "dependsOn"
-                        let deps =
-                            if isNullish depsRaw || not (isArray depsRaw) then []
-                            else (depsRaw :?> obj array) |> Array.map string |> Array.toList
-                        if ty <> "task_created" then
-                            // Non-task events: preserve in output, taskId slot = "" (handled downstream by filtering on ty = "task_created")
-                            (ty, "", title, desc, deps) :: assignIds used rest
-                        else
-                            let explicitIdOpt = let v = get e "taskId" in if isNullish v then None else Some (string v)
-                            match explicitIdOpt with
-                            | Some id ->
-                                (ty, id, title, desc, deps) :: assignIds (Set.add id used) rest
-                            | None ->
-                                match genWithRetries used 10 with
-                                | Some tid ->
-                                    (ty, tid, title, desc, deps) :: assignIds (Set.add tid used) rest
-                                | None ->
-                                    // Exhausted retries: generate anyway (extremely unlikely with 65536 space)
-                                    let tid = generateTaskId ()
-                                    (ty, tid, title, desc, deps) :: assignIds (Set.add tid used) rest
-                let inputsWithIds =
-                    assignIds existingTaskIds rawEvents
-                let created = inputsWithIds |> List.filter (fun (ty, _, _, _, _) -> ty = "task_created")
-                let depsList = created |> List.map (fun (_, tid, _, _, deps) -> tid, deps)
-                let existingIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
-                let newIds = depsList |> List.map fst |> Set.ofList
-                let allIds = Set.union existingIds newIds
-                let dangling =
-                    depsList |> List.collect (fun (id, deps) ->
-                        deps |> List.filter (fun d -> not (Set.contains d allIds))
-                             |> List.map (fun d -> id, d))
-                if dangling <> [] then return formatSquadUpdateOutcome (DependencyErrors dangling)
+                        let tasksRaw = get e "tasks"
+                        let tasks = tasksRaw :?> obj array
+                        tasks |> Array.tryFind (fun t ->
+                            str t "title" = "" || str t "description" = "") |> Option.map Some
+                    |> Option.bind (fun ot -> ot |> Option.map (fun _ -> e)))
+            match invalidTask with
+            | Some badEv ->
+                let tasksRaw = get badEv "tasks"
+                let tasks = tasksRaw :?> obj array
+                let badT = tasks |> Array.find (fun t -> str t "title" = "" || str t "description" = "")
+                let badId = let v = get badT "taskId" in if isNullish v then "<no-id>" else string v
+                return formatSquadUpdateOutcome (InvalidInput (sprintf "task '%s' must have non-empty title and description." badId))
+            | None ->
+
+            // Aggregate: extract task objects from nested tasks[] arrays
+            let aggregated =
+                rawEvents |> List.fold (fun (acc, hasCancelled) e ->
+                    if str e "type" = "tasks_created" then
+                        let tasksRaw = get e "tasks"
+                        let tasks = tasksRaw :?> obj array |> Array.toList
+                        let extracted = tasks |> List.map (fun t ->
+                            (get t "taskId" |> fun v -> if isNullish v then None else Some (string v)),
+                             str t "title", str t "description",
+                             let dr = get t "dependsOn"
+                             if isNullish dr || not (isArray dr) then [] else (dr :?> obj array) |> Array.map string |> Array.toList)
+                        (acc @ extracted, hasCancelled)
+                    else
+                        (acc, true)) ([], false)
+
+            let allRawTasks = fst aggregated
+            let hasCancelled = snd aggregated
+
+            // Assign IDs
+            let existingTaskIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
+            let rec genWithRetries (used: Set<string>) (remaining: int) : string option =
+                if remaining <= 0 then None
                 else
-                    let fullDepsList =
-                        let existingDeps = rt.Dag.Tasks |> Map.toList |> List.map (fun (id, t) -> id, t.DependsOn)
-                        existingDeps @ depsList
-                    match detectCycle fullDepsList with
-                    | Some cycle -> return formatSquadUpdateOutcome (CycleDetected cycle)
+                    let cand = generateTaskId ()
+                    let inExisting = Set.contains cand existingTaskIds
+                    let inUsed = Set.contains cand used
+                    let onRef = rt.Deps.ShowRefExists rt.ProjectRoot cand
+                    if inExisting || inUsed || onRef then genWithRetries used (remaining - 1)
+                    else Some cand
+            let rec assignIds (used: Set<string>) (tasks: (string option * string * string * string list) list) : (string * string * string * string list) list =
+                match tasks with
+                | [] -> []
+                | (idOpt, title, desc, deps) :: rest ->
+                    match idOpt with
+                    | Some id ->
+                        (id, title, desc, deps) :: assignIds (Set.add id used) rest
                     | None ->
-                        let now = rt.Deps.Now ()
-                        for (ty, tid, title, desc, deps) in inputsWithIds do
-                            if ty = "task_created" then
-                                let task = Wanxiangzhen.Kernel.Task.create tid title desc deps now
-                                rt.Dag <- rt.Dag |> addTask task
-                            elif ty = "squad_cancelled" then
-                                //取消路径：await handleSquadKill，保证事件流完整，不 fire-and-forget
-                                do! handleSquadKill rt None
-                        let createdTasks =
-                            created |> List.map (fun (_, tid, title, desc, deps) -> tid, title, desc, deps)
-                        let hasCancelled =
-                            inputsWithIds |> List.exists (fun (ty, _, _, _, _) -> ty = "squad_cancelled")
-                        let resultText =
-                            if createdTasks = [] && hasCancelled then
-                                sprintf "Squad session %s cancelled." rt.Dag.SessionId
-                            else
-                                let ev = TasksCreated (rt.Dag.SessionId, createdTasks)
-                                encodeEvent ev
-                        schedulerTick rt |> Promise.start |> ignore
-                        return resultText
+                        match genWithRetries used 10 with
+                        | Some tid ->
+                            (tid, title, desc, deps) :: assignIds (Set.add tid used) rest
+                        | None ->
+                            let tid = generateTaskId ()
+                            (tid, title, desc, deps) :: assignIds (Set.add tid used) rest
+            let assigned = assignIds existingTaskIds allRawTasks
+
+            // Dangling dependency check
+            let newIds = assigned |> List.map (fun (id, _, _, _) -> id) |> Set.ofList
+            let allIds = Set.union existingTaskIds newIds
+            let dangling =
+                assigned |> List.collect (fun (id, _, _, deps) ->
+                    deps |> List.filter (fun d -> not (Set.contains d allIds))
+                         |> List.map (fun d -> id, d))
+            if dangling <> [] then return formatSquadUpdateOutcome (DependencyErrors dangling)
+            else
+
+            // Cycle detection
+            let depsList = assigned |> List.map (fun (id, _, _, deps) -> id, deps)
+            let existingDeps = rt.Dag.Tasks |> Map.toList |> List.map (fun (id, t) -> id, t.DependsOn)
+            match detectCycle (existingDeps @ depsList) with
+            | Some cycle -> return formatSquadUpdateOutcome (CycleDetected cycle)
+            | None ->
+
+            // Add tasks to DAG
+            let now = rt.Deps.Now ()
+            for (tid, title, desc, deps) in assigned do
+                let task = Wanxiangzhen.Kernel.Task.create tid title desc deps now
+                rt.Dag <- rt.Dag |> addTask task
+
+            // Handle cancellation
+            if hasCancelled then do! handleSquadKill rt None
+
+            // Build result text and inject event
+            let createdTasks = assigned |> List.map (fun (tid, title, desc, deps) -> tid, title, desc, deps)
+            let resultText =
+                if hasCancelled && createdTasks = [] then
+                    sprintf "Squad session %s cancelled." rt.Dag.SessionId
+                else
+                    sprintf "%d task(s) created, scheduler notified." (List.length createdTasks)
+            if createdTasks <> [] then do! injectEvent rt (TasksCreated (rt.Dag.SessionId, createdTasks))
+            schedulerTick rt |> Promise.start |> ignore
+            return resultText
     }
 
 let createWithDeps (client: obj) (directory: string) (config: SquadConfig) (masterBranch: string) (gitError: string option) (deps: CoordinatorDeps) : JS.Promise<CoordinatorRuntime> =
@@ -240,7 +265,6 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             MergeBaseIsAncestor  = fun _ _ _ -> false
             MergeFfOnly          = fun _ _ -> ""
             CreateSymlinks       = fun _ _ _ -> ()
-            DetectVibeFs         = fun _ -> false
             SpawnSlave           = fun _ _ _ _ -> ()
             IsPidAlive           = fun _ -> false
             KillPid              = fun _ _ -> ()
@@ -263,7 +287,6 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             MergeBaseIsAncestor   = mergeBaseIsAncestor
             MergeFfOnly           = mergeFfOnly
             CreateSymlinks        = createSymlinks
-            DetectVibeFs          = detectVibeFs
             SpawnSlave            = spawnSlave
             IsPidAlive            = isPidAlive
             KillPid               = killPid

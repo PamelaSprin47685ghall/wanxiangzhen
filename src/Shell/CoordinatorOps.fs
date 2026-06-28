@@ -60,8 +60,7 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
                 return ()
             | Ok _ ->
                 rt.Deps.CreateSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
-                let vibeFs = rt.Deps.DetectVibeFs rt.ProjectRoot
-                let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch vibeFs
+                let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch
                 let slaveEnv = createObj []
                 assignInto slaveEnv (get nodeProcess "env") |> ignore
                 setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
@@ -69,7 +68,6 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
                 setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
                 setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
                 setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
-                if vibeFs then setKey slaveEnv "SQUAD_VIBEFS" (box "1")
                 rt.Deps.SpawnSlave rt.Config.Terminal wtPath slaveEnv prompt
                 let now = rt.Deps.Now ()
                 rt.Dag <- rt.Dag |> updateTask taskId (fun t ->

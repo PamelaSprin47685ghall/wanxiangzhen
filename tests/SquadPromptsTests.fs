@@ -8,27 +8,28 @@ let private title = "test-title"
 let private description = "test-description-body"
 let private masterBranch = "main"
 
-let private vibeFsPrompt () : string =
-    buildSlavePrompt taskId title description masterBranch true
-
-let private noVibeFsPrompt () : string =
-    buildSlavePrompt taskId title description masterBranch false
+let private prompt () : string =
+    buildSlavePrompt taskId title description masterBranch
 
 let entries () : (string * (unit -> unit)) list = [
-    ("buildSlavePrompt vibeFs=true contains task: frontmatter", fun () ->
-        let p = vibeFsPrompt ()
+    ("buildSlavePrompt output starts with ---\\ntask: frontmatter", fun () ->
+        let p = prompt ()
         check (p.StartsWith "---\ntask: "))
 
-    ("buildSlavePrompt vibeFs=true contains taskId and title", fun () ->
-        let p = vibeFsPrompt ()
+    ("buildSlavePrompt contains taskId and title", fun () ->
+        let p = prompt ()
         check (p.Contains (sprintf "task %s" taskId))
         check (p.Contains title))
 
-    ("buildSlavePrompt vibeFs=false contains submit_to_squad", fun () ->
-        let p = noVibeFsPrompt ()
+    ("buildSlavePrompt contains submit_to_squad", fun () ->
+        let p = prompt ()
         check (p.Contains "submit_to_squad"))
 
-    ("buildSlavePrompt vibeFs=false contains git rebase + masterBranch", fun () ->
-        let p = noVibeFsPrompt ()
+    ("buildSlavePrompt contains git rebase + masterBranch", fun () ->
+        let p = prompt ()
         check (p.Contains (sprintf "git rebase %s" masterBranch)))
+
+    ("buildSlavePrompt contains /loop or With-Review", fun () ->
+        let p = prompt ()
+        check (p.Contains "/loop" || p.Contains "With-Review"))
 ]

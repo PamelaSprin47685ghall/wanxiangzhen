@@ -85,4 +85,67 @@ let entries () : (string * (unit -> unit)) list = [
     ("Codec.TaskMerged prose includes sha", fun () ->
         let prose = eventProse (TaskMerged ("s1", "t1", "sha999"))
         check (prose.Contains "sha999"))
+
+    ("Codec.multi frontmatter decodes first event", fun () ->
+        let ev1 = SquadCreated ("s1", "req one")
+        let ev2 = TasksCreated ("s2", [("t1", "title1", "desc1", [])])
+        let combined = encodeEvent ev1 + "\n" + encodeEvent ev2
+        match decodeEvent combined with
+        | Some (SquadCreated (_, req)) ->
+            equal "req one" req
+        | _ -> check false)
+
+    ("Codec.encodeEvents two events has two frontmatter blocks", fun () ->
+        let ev1 = SquadCreated ("s1", "req one")
+        let ev2 = TasksCreated ("s2", [("t1", "title1", "desc1", [])])
+        let encoded = encodeEvents [ev1; ev2]
+        let eventLines = encoded.Split('\n') |> Array.filter (fun l -> l.StartsWith "squad_event:")
+        equal 2 eventLines.Length
+        check (encoded.Contains "squad_event: squad_created")
+        check (encoded.Contains "squad_event: tasks_created"))
+
+    ("Codec.decodeEvents parses multiple frontmatter events", fun () ->
+        let ev1 = SquadCreated ("s1", "req one")
+        let ev2 = TasksCreated ("s2", [("t1", "title1", "desc1", [])])
+        let combined = encodeEvent ev1 + "\n" + encodeEvent ev2
+        let decoded = decodeEvents combined
+        equal 2 decoded.Length
+        match (decoded.[0], decoded.[1]) with
+        | SquadCreated (_, req), TasksCreated (_, tasks) ->
+            equal "req one" req
+            equal 1 tasks.Length
+            equal "t1" (tasks.[0] |> fun (id,_,_,_) -> id)
+        | _ -> check false)
+
+    ("Codec.decodeEvents skips unrecognized blocks", fun () ->
+        let preamble = "This is just a paragraph with no frontmatter.\n\n"
+        let ev1 = SquadCreated ("s1", "req one")
+        let ev2 = TaskMerged ("s1", "t1", "sha999")
+        let combined = preamble + encodeEvent ev1 + "\n" + encodeEvent ev2
+        let decoded = decodeEvents combined
+        equal 2 decoded.Length
+        match (decoded.[0], decoded.[1]) with
+        | SquadCreated (_, req), TaskMerged (_, _, sha) ->
+            equal "req one" req
+            equal "sha999" sha
+        | _ -> check false)
+
+    ("Codec.decodeEvents empty string returns empty list", fun () ->
+        let decoded = decodeEvents ""
+        equal 0 decoded.Length)
+
+    ("Codec.encodeEvents/decodeEvents round-trip", fun () ->
+        let events = [
+            SquadCreated ("s1", "req one")
+            TasksCreated ("s1", [("t1", "title1", "desc1", []); ("t2", "title2", "desc2", ["t1"])])
+            TaskStarted ("s1", "t1", "/wt/path", "branch-x")
+            TaskSubmitted ("s1", "t1", "abc123")
+            TaskMerged ("s1", "t1", "sha999")
+            TaskDone ("s1", "t1", true)
+            SquadCancelled "s1"
+        ]
+        let encoded = encodeEvents events
+        let decoded = decodeEvents encoded
+        equal events.Length decoded.Length
+        List.iter2 (fun e1 e2 -> equal e1 e2) events decoded)
 ]

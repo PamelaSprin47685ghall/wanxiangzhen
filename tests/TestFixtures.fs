@@ -27,7 +27,6 @@ let stubDeps () : CoordinatorDeps =
       MergeBaseIsAncestor  = fun _ _ _ -> false
       MergeFfOnly          = fun _ _ -> ""
       CreateSymlinks       = fun _ _ _ -> ()
-      DetectVibeFs         = fun _ -> false
       SpawnSlave           = fun _ _ _ _ -> ()
       IsPidAlive           = fun _ -> false
       KillPid              = fun _ _ -> ()

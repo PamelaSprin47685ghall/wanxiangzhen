@@ -15,6 +15,7 @@ open Wanxiangzhen.Kernel.SquadConfig
 open Wanxiangzhen.Shell.SlaveRuntime
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
+open Wanxiangzhen.Tests.TestDoubles
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Process / env helpers (slave mode needs SQUAD_* env vars)
@@ -264,13 +265,7 @@ let testFullFlowSquadUpdateToMerged () : JS.Promise<unit> =
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
         // ② squad_update with one task
-        let evtObj = createObj [
-            "type",        box "task_created"
-            "taskId",      box "squad-e2e-01"
-            "title",       box "T"
-            "description", box "D"
-            "dependsOn",   box (Array.empty<string>)
-        ]
+        let evtObj = mkTasksCreated [ mkTask "squad-e2e-01" "T" "D" [] ]
         let updateArgs = createObj [ "events", box [| evtObj |] ]
         let tool = get hooks "tool"
         let sqUp = get tool "squad_update"
@@ -346,13 +341,7 @@ let testSquadUpdateCancelsRunningTask () : JS.Promise<unit> =
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
         // ② squad_update creates one task
-        let evtObj = createObj [
-            "type",        box "task_created"
-            "taskId",      box "squad-cancel-01"
-            "title",       box "Cancel-Test"
-            "description", box "desc"
-            "dependsOn",   box (Array.empty<string>)
-        ]
+        let evtObj = mkTasksCreated [ mkTask "squad-cancel-01" "Cancel-Test" "desc" [] ]
         let updateArgs = createObj [ "events", box [| evtObj |] ]
         let sqUp       = get (get hooks "tool") "squad_update"
         let sqExec     = get sqUp "execute"
@@ -417,13 +406,7 @@ let testSquadKillCancelsWithoutCleanup () : JS.Promise<unit> =
         let cmdHook = get hooks "command.execute.before"
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
-        let evtObj = createObj [
-            "type",        box "task_created"
-            "taskId",      box "squad-kill-01"
-            "title",       box "Kill-Test"
-            "description", box "desc"
-            "dependsOn",   box (Array.empty<string>)
-        ]
+        let evtObj = mkTasksCreated [ mkTask "squad-kill-01" "Kill-Test" "desc" [] ]
         let updateArgs = createObj [ "events", box [| evtObj |] ]
         let sqUp = get (get hooks "tool") "squad_update"
         let execute = get sqUp "execute"
@@ -474,13 +457,7 @@ let testSlaveModeQuerySquad () : JS.Promise<unit> =
         let cmdHook   = get hooks "command.execute.before"
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
-        let evtObj = createObj [
-            "type",        box "task_created"
-            "taskId",      box "squad-query-01"
-            "title",       box "Query-Test"
-            "description", box "desc"
-            "dependsOn",   box (Array.empty<string>)
-        ]
+        let evtObj = mkTasksCreated [ mkTask "squad-query-01" "Query-Test" "desc" [] ]
         let updateArgs = createObj [ "events", box [| evtObj |] ]
         let sqUp       = get (get hooks "tool") "squad_update"
         let sqExec     = get sqUp "execute"
@@ -559,15 +536,9 @@ let testSquadUpdateGeneratesUniqueIds () : JS.Promise<unit> =
         let cmdHook   = get hooks "command.execute.before"
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
-        // squad_update with two task_created events, both omit taskId
-        let mkEvt (title: string) (desc: string) : obj =
-            createObj [
-                "type",        box "task_created"
-                "title",       box title
-                "description", box desc
-                "dependsOn",   box (Array.empty<string>)
-            ]
-        let evts = createObj [ "events", box [| mkEvt "T1" "D1"; mkEvt "T2" "D2" |] ]
+        // squad_update with two tasks, both omit taskId
+        let mkT (title: string) (desc: string) : obj = mkTask "" title desc []
+        let evts = createObj [ "events", box [| mkTasksCreated [ mkT "T1" "D1"; mkT "T2" "D2" ] |] ]
         let sqUp     = get (get hooks "tool") "squad_update"
         let execute  = get sqUp "execute"
         let execFn   = unbox<System.Func<obj, obj, JS.Promise<string>>> execute
@@ -610,12 +581,7 @@ let testSquadUpdateRetriesGeneratedIdOnRefCollision () : JS.Promise<unit> =
         do! unbox<JS.Promise<unit>> (cmdHook $ (cmdInput, cmdOutput))
 
         // ② squad_update with task_created, omitting taskId → triggers auto-generation
-        let evtObj = createObj [
-            "type",        box "task_created"
-            "title",       box "Collision-Test"
-            "description", box "Verify fallback after 10 ref-collision retries"
-            "dependsOn",   box (Array.empty<string>)
-        ]
+        let evtObj = mkTasksCreated [ mkTask "" "Collision-Test" "Verify fallback after 10 ref-collision retries" [] ]
         let updateArgs = createObj [ "events", box [| evtObj |] ]
         let sqUp       = get (get hooks "tool") "squad_update"
         let execute    = get sqUp "execute"

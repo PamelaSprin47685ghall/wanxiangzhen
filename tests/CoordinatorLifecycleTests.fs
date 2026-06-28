@@ -12,6 +12,8 @@ open Wanxiangzhen.Shell.CoordinatorLifecycle
 open Wanxiangzhen.Shell.EventCodec
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
+let private mkTask = Wanxiangzhen.Tests.TestDoubles.mkTask
+let private mkTasksCreated = Wanxiangzhen.Tests.TestDoubles.mkTasksCreated
 
 // ══════════════════════════════════════════════════════════════════════════════
 // All tests are async (handleSquadUnit / replayFromHistory return JS.Promise).
@@ -38,13 +40,7 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
     ("handleSquadUpdate empty title rejected — DAG unchanged", fun () ->
         promise {
             let rt = mkRuntime ()
-            let events = box [| createObj [
-                "type", box "task_created"
-                "taskId", box "squad-a1b2"
-                "title", box ""
-                "description", box "Desc A"
-                "dependsOn", box [||]
-            ] |]
+            let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "" "Desc A" [] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
             check (result.Contains "Error")
@@ -55,13 +51,7 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
     ("handleSquadUpdate empty description rejected — DAG unchanged", fun () ->
         promise {
             let rt = mkRuntime ()
-            let events = box [| createObj [
-                "type", box "task_created"
-                "taskId", box "squad-a1b2"
-                "title", box "Task A"
-                "description", box ""
-                "dependsOn", box [||]
-            ] |]
+            let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "" [] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
             check (result.Contains "Error")
@@ -72,13 +62,7 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
     ("handleSquadUpdate dangling deps returns dependency error", fun () ->
         promise {
             let rt = mkRuntime ()
-            let events = box [| createObj [
-                "type", box "task_created"
-                "taskId", box "squad-a1b2"
-                "title", box "Task A"
-                "description", box "Desc A"
-                "dependsOn", box [| "squad-zzzz" |]
-            ] |]
+            let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "Desc A" ["squad-zzzz"] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
             check (result.Contains "squad-a1b2")
@@ -88,52 +72,42 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
     ("handleSquadUpdate cycle returns cycle detected", fun () ->
         promise {
             let rt = mkRuntime ()
-            let events = box [|
-                createObj [
-                    "type", box "task_created"
-                    "taskId", box "squad-a1b2"
-                    "title", box "Task A"
-                    "description", box "desc A"
-                    "dependsOn", box [| "squad-c3d4" |]
-                ]
-                createObj [
-                    "type", box "task_created"
-                    "taskId", box "squad-c3d4"
-                    "title", box "Task B"
-                    "description", box "desc B"
-                    "dependsOn", box [| "squad-a1b2" |]
-                ]
-            |]
+            let events = box [| mkTasksCreated [
+                mkTask "squad-a1b2" "Task A" "desc A" ["squad-c3d4"]
+                mkTask "squad-c3d4" "Task B" "desc B" ["squad-a1b2"]
+            ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
             check (result.Contains "cycle")
         })
 
-    ("handleSquadUpdate success returns YAML frontmatter", fun () ->
+    ("handleSquadUpdate success returns confirmation text and injects events", fun () ->
         promise {
-            let rt = mkRuntime ()
-            let events = box [|
-                createObj [
-                    "type", box "task_created"
-                    "taskId", box "squad-a1b2"
-                    "title", box "Task A"
-                    "description", box "Desc A"
-                    "dependsOn", box [||]
-                ]
-                createObj [
-                    "type", box "task_created"
-                    "taskId", box "squad-c3d4"
-                    "title", box "Task B"
-                    "description", box "Desc B"
-                    "dependsOn", box [| "squad-a1b2" |]
-                ]
-            |]
+            let promptCalls = System.Collections.Generic.List<string * string * string>()
+            let recordingDeps =
+                { stubDeps () with
+                    PromptSession = fun client sid msg ->
+                        promptCalls.Add((string client, sid, msg)) |> ignore
+                        Promise.lift () }
+            let rt = mkRuntimeWithDeps recordingDeps
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
+            rt.MasterSessionId <- "squad-session-001"
+            let events = box [| mkTasksCreated [
+                mkTask "squad-a1b2" "Task A" "Desc A" []
+                mkTask "squad-c3d4" "Task B" "Desc B" ["squad-a1b2"]
+            ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (result.StartsWith "---")
-            check (result.Contains "squad_event: tasks_created")
-            check (result.Contains "squad-a1b2")
-            check (result.Contains "squad-c3d4")
+            // result is short confirmation text, NOT YAML frontmatter
+            check (not (result.StartsWith "---"))
+            check (result.Contains "created")
+            check (result.Contains "2")
+            // events were injected into the master session via PromptSession
+            check (promptCalls.Count >= 1)
+            let (_, injectedSid, injectedMsg) = promptCalls.[0]
+            check (injectedSid = "squad-session-001")
+            check (injectedMsg.Contains "squad_event: tasks_created")
+            check (injectedMsg.Contains "squad-a1b2")
         })
 
     ("mkRuntime produces independent GitQueue and InjectQueue", fun () ->

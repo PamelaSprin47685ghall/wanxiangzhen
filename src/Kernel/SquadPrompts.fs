@@ -1,26 +1,17 @@
 module Wanxiangzhen.Kernel.SquadPrompts
 
 let buildSlavePrompt (taskId: string) (title: string) (description: string)
-                     (masterBranch: string) (vibeFsDetected: bool) : string =
-     if vibeFsDetected then
-         sprintf
-             "---\ntask: %s\n---\n\n\
-              You are executing squad task %s: %s\n\
-              Task description:\n%s\n\n\
-              Complete the task following the review workflow.\n\
-              After development, call submit_review for review.\n\
-              After review PASS, git commit, then call submit_to_squad.\n\
-              If review REJECT, fix per feedback and re-review until PASS."
-             title taskId title description
-     else
-        sprintf
-            "You are executing squad task %s: %s\n\n\
-             Task description:\n%s\n\n\
-             Complete the above task in the current worktree. After completion:\n\
-             1. git add + git commit (on branch %s)\n\
-             2. Call submit_to_squad tool to submit to coordinator\n\
-             If asked to rebase, run: git rebase %s, then resubmit.\n\
-             Use query_squad tool when unsure about global state."
-            taskId title description taskId masterBranch
+                     (masterBranch: string) : string =
+     sprintf
+          "---\ntask: %s\n---\n\n\
+           You are executing squad task %s: %s\n\
+           Task description:\n%s\n\n\
+           Complete the task following the review workflow.\n\
+           Activate With-Review Mode by calling /loop <task description>.\n\
+           After development, call submit_review for review.\n\
+           After review PASS, git commit, then call submit_to_squad.\n\
+           If review REJECT, fix per feedback and re-review until PASS.\n\
+           If asked to rebase, run: git rebase %s, then resubmit."
+         title taskId title description masterBranch
 
 

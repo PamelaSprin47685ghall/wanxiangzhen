@@ -52,6 +52,3 @@ let readConfig (worktree: string) : SquadConfig =
                 else mergeWithDefaults (Some (parseSquadConfig parsed))
             with _ -> defaults
 
-let detectVibeFs (directory: string) : bool =
-    try existsSync (pathJoin (pathJoin directory "node_modules") "wanxiangshu")
-    with _ -> false

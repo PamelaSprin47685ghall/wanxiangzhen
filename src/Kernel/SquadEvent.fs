@@ -49,7 +49,7 @@ let eventProse (e: SquadEvent) : string =
          - Have clear completion criteria\n\
          - Minimize file conflicts with other tasks\n\
          Express dependencies via dependsOn (dependency must be merged first).\n\
-         Call the squad_update tool with an events array containing all task_created events."
+                   Call the squad_update tool with one tasks_created event carrying a tasks[] array."
     | TasksCreated (_, tasks) ->
         let count = List.length tasks
         sprintf "%d tasks created. Nothing needs to be done. The scheduler will start them as dependencies are met." count
