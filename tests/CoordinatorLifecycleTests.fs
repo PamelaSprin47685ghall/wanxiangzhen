@@ -9,7 +9,7 @@ open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.SerialQueue
 open Wanxiangzhen.Shell.CoordinatorLifecycle
-open Wanxiangzhen.Shell.EventCodec
+open Wanxiangzhen.Shell.SquadEventLogCodec
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
 let private mkTask = Wanxiangzhen.Tests.TestDoubles.mkTask
@@ -154,12 +154,8 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             let evtTasksCreated  = TasksCreated ("squad-session-001", [("squad-a1b2", "Task A", "desc A", [])])
             let evtTaskStarted   = TaskStarted ("squad-session-001", "squad-a1b2", "/wt/squad-a1b2", "squad-a1b2")
             let evtTaskSubmitted = TaskSubmitted ("squad-session-001", "squad-a1b2", "abc123")
-            let history = [
-                encodeEvent evtSquadCreated
-                encodeEvent evtTasksCreated
-                encodeEvent evtTaskStarted
-                encodeEvent evtTaskSubmitted ]
-            let deps2 = { deps with ReadAllTexts = fun _ _ _ -> Promise.lift history }
+            let history = [ evtSquadCreated; evtTasksCreated; evtTaskStarted; evtTaskSubmitted ]
+            let deps2 = { deps with ReadAllSquadEvents = fun _ -> Promise.lift history }
             let rt = mkRuntimeWithDeps deps2
             rt.MasterSessionId <- "squad-session-001"
             rt.GitError       <- None

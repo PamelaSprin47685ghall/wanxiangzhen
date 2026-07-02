@@ -24,6 +24,8 @@ let killPid (pid: int) (signal: obj) : unit = jsNative
 type CoordinatorDeps = {
     PromptSession       : obj -> string -> string -> JS.Promise<unit>
     ReadAllTexts        : obj -> string -> string -> JS.Promise<string list>
+    ReadAllSquadEvents  : string -> JS.Promise<SquadEvent list>
+    AppendSquadEvent    : string -> string -> SquadEvent -> JS.Promise<Result<unit, string>>
     TryWorktreeAdd      : string -> string -> string -> string -> Result<string, string>
     TryWorktreeRemoveForce : string -> string -> Result<string, string>
     TryBranchDeleteForce  : string -> string -> Result<string, string>
@@ -85,15 +87,22 @@ let rec private tryPromptWithRetry (rt: CoordinatorRuntime) (sessionId: string) 
                     return ()
         }
 
-let injectEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<unit> =
+let commitEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<Result<unit, string>> =
+    let at = rt.Deps.Now ()
     let msg = encodeEvent e
     rt.InjectQueue.Enqueue(fun () ->
-        if rt.MasterSessionId = "" then Promise.lift ()
-        else tryPromptWithRetry rt rt.MasterSessionId msg 500 3)
-    |> Promise.map ignore
+        promise {
+            let! (wr: Result<unit, string>) = rt.Deps.AppendSquadEvent rt.ProjectRoot at e
+            match wr with
+            | Error (err: string) -> return Error err
+            | Ok () ->
+                if rt.MasterSessionId <> "" then
+                    do! tryPromptWithRetry rt rt.MasterSessionId msg 500 3
+                return Ok ()
+        })
 
-let injectEventFire (rt: CoordinatorRuntime) (e: SquadEvent) : unit =
-    injectEvent rt e |> Promise.start
+let injectEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<unit> =
+    commitEvent rt e |> Promise.map (fun _ -> ())
 
 let rec waitForPidDeath (deps: CoordinatorDeps) (pid: int) (remaining: int) : JS.Promise<unit> =
     if remaining <= 0 then Promise.lift ()

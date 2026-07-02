@@ -11,6 +11,9 @@ let private allSyncTests : (string * (unit -> unit)) list =
     @ Wanxiangzhen.Tests.EventReplayTests.entries ()
     @ Wanxiangzhen.Tests.SchedulerTests.entries ()
     @ Wanxiangzhen.Tests.EventCodecTests.entries ()
+    @ Wanxiangzhen.Tests.EventLogParseTests.entries ()
+    @ Wanxiangzhen.Tests.SquadEventLogCodecTests.entries ()
+    @ Wanxiangzhen.Tests.SquadUpdateIdAssignTests.entries ()
     @ Wanxiangzhen.Tests.FfDecisionTests.entries ()
     @ Wanxiangzhen.Tests.ExtendedFfDecisionTests.entries ()
     @ Wanxiangzhen.Tests.HttpCodecTests.entries ()
@@ -35,6 +38,7 @@ let private allAsyncTests : (string * (unit -> JS.Promise<unit>)) list =
     @ Wanxiangzhen.Tests.OpencodePluginE2eTests.entriesAsync ()
     @ Wanxiangzhen.Tests.SlaveRuntimeTests.entriesAsync ()
     @ Wanxiangzhen.Tests.ExtendedMockE2eTests.entriesAsync ()
+    @ Wanxiangzhen.Tests.SquadEventLogFsTests.entriesAsync ()
 
 let runAll (_args: string array) : JS.Promise<int> =
     promise {

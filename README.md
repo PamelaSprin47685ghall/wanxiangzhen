@@ -26,8 +26,8 @@ pnpm add -g wanxiangzhen
 |------|------|
 | **Coordinator** | 用户的 opencode 进程。加载万象阵插件后自起本地 HTTP server，负责 DAG 拆解、调度、ff 合并、worktree 与 slave 生命周期。 |
 | **Slave** | coordinator 经 `child_process` 起的独立 opencode 进程（`opencode tui --prompt`），在隔离 worktree 工作。状态查询与提交经 HTTP 短连接发给 coordinator。 |
-| **master session 历史** | **SSOT**。DAG 当前状态不是进程内存能可靠承诺的——coordinator 重启、hook 打断后内存态丢失。master session 对话历史天然持久，是唯一真相源。内存 DAG 只是可重建投影，重启时调 `client.session.messages()` 拉全量存储历史折叠重建。 |
-| **git refs** | 合并事实的第二真理源。`task_merged` 的不可逆事实落在 git refs（主分支含该分支提交）。即使事件消息丢失，也能 `git merge-base --is-ancestor` 反查。 |
+| **`.wanxiangzhen.ndjson`** | **SSOT**（项目根 NDJSON 事件流，每行含 `session`）。意图不落盘，事实 append；内存 DAG 为 fold 投影。启动重放事件文件；文件锁保证串行追加。详见 `PRD/EventSourcing.md`。 |
+| **git refs** | 合并事实的第二真理源。`task_merged` 落在 refs；重放后对 `running`/`submitted` 可 `git merge-base --is-ancestor` 校正。 |
 
 ## 4. 工作流简述
 

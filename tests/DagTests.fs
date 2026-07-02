@@ -113,6 +113,10 @@ let entries () : (string * (unit -> unit)) list = [
         let s = formatSquadUpdateOutcome (CycleDetected ["squad-x"; "squad-y"; "squad-x"])
         equal "Dependency cycle detected: squad-x → squad-y → squad-x. Please re-decompose without cycles." s)
 
+    ("formatSquadUpdateOutcome IdExhausted", fun () ->
+        let s = formatSquadUpdateOutcome IdExhausted
+        check (s.Contains "unique task id"))
+
     ("formatSquadUpdateOutcome InvalidInput", fun () ->
         let s = formatSquadUpdateOutcome (InvalidInput "bad input")
         equal "Error: bad input" s)

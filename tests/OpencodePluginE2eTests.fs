@@ -15,6 +15,7 @@ open Wanxiangzhen.Kernel.SquadConfig
 open Wanxiangzhen.Shell.SlaveRuntime
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
+open Wanxiangzhen.Kernel.SquadEvent
 open Wanxiangzhen.Tests.TestDoubles
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -92,6 +93,7 @@ type ObservableDeps = {
     mutable mergeFfResult             : string
     mutable isPidAliveResult          : bool
     mutable nowResult                 : string
+    mutable squadEventLog             : SquadEvent list
 }
 
 let mkDefaultObs () : ObservableDeps =
@@ -111,7 +113,8 @@ let mkDefaultObs () : ObservableDeps =
       mergeBaseResult       = true
       mergeFfResult         = "merged-sha"
       isPidAliveResult      = true
-      nowResult             = "2025-01-01T00:00:00Z" }
+      nowResult             = "2025-01-01T00:00:00Z"
+      squadEventLog         = [] }
 
 let mkObservableDeps (captures: MockCaptures) (obs: ObservableDeps) : CoordinatorDeps =
     let baseDeps = stubDeps ()
@@ -141,7 +144,11 @@ let mkObservableDeps (captures: MockCaptures) (obs: ObservableDeps) : Coordinato
             obs.showRefExistsCalls <- obs.showRefExistsCalls @ [ (c, b) ]; obs.showRefExistsResult
         RevParseBranch      = fun _ -> obs.revParseBranchResult
         IsPidAlive          = fun _ -> obs.isPidAliveResult
-        Now                 = fun () -> obs.nowResult }
+        Now                 = fun () -> obs.nowResult
+        ReadAllSquadEvents  = fun _ -> Promise.lift obs.squadEventLog
+        AppendSquadEvent    = fun _ _ e ->
+            obs.squadEventLog <- obs.squadEventLog @ [ e ]
+            Promise.lift (Ok ()) }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // waitForScheduler — polls rt.Dag until a task transitions Pending→Running
@@ -300,7 +307,11 @@ let testFullFlowSquadUpdateToMerged () : JS.Promise<unit> =
         check (subResp.StatusCode = 200)
         check ((str subResp.Body "result") = "merged")
 
-        // ⑦ assertions on DAG + side-effects
+        let rec waitMerged n =
+            if n <= 0 then Promise.lift ()
+            elif obs.squadEventLog |> List.exists (function TaskMerged _ -> true | _ -> false) then Promise.lift ()
+            else Promise.sleep 15 |> Promise.bind (fun () -> waitMerged (n - 1))
+        do! waitMerged 80
 
         match rt.Dag.Tasks |> Map.tryFind "squad-e2e-01" with
         | Some t -> check (t.Status = Merged)
@@ -308,15 +319,7 @@ let testFullFlowSquadUpdateToMerged () : JS.Promise<unit> =
 
         check (obs.worktreeRemoveCalls.Length = 1)
         check (obs.branchDeleteCalls.Length   = 1)
-
-        // ⑧ verify task_merged was injected into prompts
-        let mergedPrompt =
-            captures.prompts
-            |> List.tryFind (fun p ->
-                let parts = get p "body" |> fun b -> get b "parts" :?> obj array
-                parts |> Array.exists (fun part -> (str part "text").Contains "task_merged"))
-
-        check (mergedPrompt.IsSome)
+        check (obs.squadEventLog |> List.exists (function TaskMerged _ -> true | _ -> false))
     }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -375,15 +378,7 @@ let testSquadUpdateCancelsRunningTask () : JS.Promise<unit> =
         // ⑦ verify KillPid was called (non-empty)
         check (obs.killPidCalls.Length > 0)
 
-        // ⑧ verify exactly one squad_cancelled event in prompts
-        let cancelPrompts =
-            captures.prompts
-            |> List.choose (fun p ->
-                let parts = get p "body" |> fun b -> get b "parts" :?> obj array
-                parts |> Array.tryPick (fun part ->
-                    let text = str part "text"
-                    if text.Contains "squad_cancelled" then Some text else None))
-        check (cancelPrompts.Length = 1)
+        check (obs.squadEventLog |> List.filter (function SquadCancelled _ -> true | _ -> false) |> List.length = 1)
     }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -559,8 +554,7 @@ let testSquadUpdateGeneratesUniqueIds () : JS.Promise<unit> =
      }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Test 9 — collision retry exhaustion: ShowRefExists always true, taskId omitted,
-//           genWithRetries exhausts 10 attempts, fallback generates task anyway
+// Test 9 — collision retry exhaustion: ShowRefExists always true → IdExhausted error
 // ══════════════════════════════════════════════════════════════════════════════
 
 let testSquadUpdateRetriesGeneratedIdOnRefCollision () : JS.Promise<unit> =
@@ -587,25 +581,12 @@ let testSquadUpdateRetriesGeneratedIdOnRefCollision () : JS.Promise<unit> =
         let execute    = get sqUp "execute"
         let execFn     = unbox<System.Func<obj, obj, JS.Promise<string>>> execute
         rt.Scheduling <- true
-        let! _ = execFn.Invoke(updateArgs, createObj [])
+        let! result = execFn.Invoke(updateArgs, createObj [])
         rt.Scheduling <- false
-        do! schedulerTick rt
 
-        // ③ assertions
-
-        // genWithRetries is called once per ID attempt, 10 retries total → >= 10 calls
+        check (result.Contains "unique task id")
         check (obs.showRefExistsCalls.Length >= 10)
-
-        // Task must still be created even though every generated ID "collided".
-        // The auto-generated taskId is random; find it by title in the DAG.
-        let collisionTask =
-            rt.Dag.Tasks
-            |> Map.toList
-            |> List.tryFind (fun (_, t) -> t.Title = "Collision-Test")
-        check (collisionTask.IsSome)
-        match collisionTask with
-        | Some (_, t) -> check (t.Status = Running)  // schedulerTick starts ready tasks → Running
-        | None   -> check false
+        check (rt.Dag.Tasks.IsEmpty)
      }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -640,6 +621,6 @@ let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
     ("E2E.squad_update_generates_unique_ids: omitting taskId produces two distinct squad- IDs",
       testSquadUpdateGeneratesUniqueIds)
 
-    ("E2E.collision_retry_exhaustion: ShowRefExists always true, genWithRetries exhausts 10 attempts, task still created via fallback",
+    ("E2E.collision_retry_exhaustion: ShowRefExists always true returns IdExhausted, DAG unchanged",
       testSquadUpdateRetriesGeneratedIdOnRefCollision)
 ]

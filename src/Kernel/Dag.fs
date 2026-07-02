@@ -11,6 +11,7 @@ type SquadUpdateOutcome =
     | DependencyErrors of errors: (string * string) list
     | CycleDetected of cycle: string list
     | InvalidInput of message: string
+    | IdExhausted
 
 let formatSquadUpdateOutcome (o: SquadUpdateOutcome) : string =
     match o with
@@ -21,6 +22,7 @@ let formatSquadUpdateOutcome (o: SquadUpdateOutcome) : string =
     | CycleDetected cycle ->
         sprintf "Dependency cycle detected: %s. Please re-decompose without cycles." (String.concat " → " cycle)
     | InvalidInput msg -> sprintf "Error: %s" msg
+    | IdExhausted -> "Error: Could not allocate a unique task id after 10 attempts."
 
 type Dag = {
     SessionId: string

@@ -17,6 +17,7 @@ open Wanxiangzhen.Shell.HttpCodec
 open Wanxiangzhen.Shell.SessionIo
 open Wanxiangzhen.Shell.SerialQueue
 open Wanxiangzhen.Shell.EventCodec
+open Wanxiangzhen.Shell.SquadEventLogRuntime
 open Wanxiangzhen.Shell.HttpServer
 open Wanxiangzhen.Shell.ConfigReader
 open Wanxiangzhen.Shell.GitShell
@@ -56,8 +57,11 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
             if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
                 rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
             let newSid = "squad-session-" + (rt.Deps.Now ()).Substring(0, 19).Replace("T", "-").Replace(":", "-")
-            rt.Dag <- empty newSid requirement
             let evt = SquadCreated (newSid, requirement)
+            let! cr = commitEvent rt evt
+            match cr with
+            | Error _ -> ()
+            | Ok () -> rt.Dag <- empty newSid requirement
             let part = box {| ``type`` = "text"; text = encodeEvent evt |}
             mutateOutputParts output part
         | "squad-kill" ->
@@ -160,6 +164,8 @@ let private realCoordinatorDeps () : CoordinatorDeps =
     let depsRef = ref {
         PromptSession        = fun _ _ _ -> Promise.lift ()
         ReadAllTexts         = fun _ _ _ -> Promise.lift []
+        ReadAllSquadEvents   = readAllSquadEvents
+        AppendSquadEvent     = appendSquadEvent
         TryWorktreeAdd       = fun _ _ _ _ -> Ok ""
         TryWorktreeRemoveForce = fun _ _ -> Ok ""
         TryBranchDeleteForce = fun _ _ -> Ok ""
@@ -182,6 +188,8 @@ let private realCoordinatorDeps () : CoordinatorDeps =
     let deps = {
         PromptSession        = promptSession
         ReadAllTexts         = readAllTexts
+        ReadAllSquadEvents   = readAllSquadEvents
+        AppendSquadEvent     = appendSquadEvent
         TryWorktreeAdd       = tryWorktreeAdd
         TryWorktreeRemoveForce = tryWorktreeRemoveForce
         TryBranchDeleteForce = tryBranchDeleteForce

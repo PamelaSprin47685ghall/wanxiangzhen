@@ -6,6 +6,7 @@ open Wanxiangzhen.Kernel.Task
 open Wanxiangzhen.Kernel.Dag
 open Wanxiangzhen.Kernel.SquadEvent
 open Wanxiangzhen.Kernel.FfDecision
+open Wanxiangzhen.Kernel.SquadUpdateIdAssign
 open Wanxiangzhen.Kernel.SquadConfig
 open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.GitShell
@@ -15,6 +16,7 @@ open Wanxiangzhen.Shell.HttpCodec
 open Wanxiangzhen.Shell.EventCodec
 open Wanxiangzhen.Shell.ConfigReader
 open Wanxiangzhen.Shell.SessionIo
+open Wanxiangzhen.Shell.SquadEventLogRuntime
 open Wanxiangzhen.Shell.SlaveSpawn
 open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.SymlinkShell
@@ -24,43 +26,41 @@ open Wanxiangzhen.Shell.CoordinatorOps
 
 let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
     promise {
-        if rt.MasterSessionId = "" then return ()
-        else
-            let! texts = rt.Deps.ReadAllTexts rt.Client rt.MasterSessionId ""
-            let events = texts |> List.collect decodeEvents
-            let mutable currentDag = empty "" ""
-            let mutable sessions = Map.empty
-            for ev in events do
-                match ev with
-                | SquadCreated (sid, req) ->
-                    if currentDag.SessionId <> "" && not currentDag.Tasks.IsEmpty then
-                        sessions <- sessions.Add(currentDag.SessionId, currentDag)
-                    currentDag <- empty sid req
-                | _ ->
-                    currentDag <- foldEvent currentDag ev
-            
-            let reconciledTasks =
-                currentDag.Tasks |> Map.map (fun _ t ->
-                    if t.Status = Submitted || t.Status = Running then
-                        match rt.GitError with
-                        | Some _ ->
+        let! events = rt.Deps.ReadAllSquadEvents rt.ProjectRoot
+        let mutable currentDag = empty "" ""
+        let mutable sessions = Map.empty
+        for ev in events do
+            match ev with
+            | SquadCreated (sid, req) ->
+                if currentDag.SessionId <> "" && not currentDag.Tasks.IsEmpty then
+                    sessions <- sessions.Add(currentDag.SessionId, currentDag)
+                currentDag <- empty sid req
+            | _ ->
+                currentDag <- foldEvent currentDag ev
+
+        let reconciledTasks =
+            currentDag.Tasks |> Map.map (fun _ t ->
+                if t.Status = Submitted || t.Status = Running then
+                    match rt.GitError with
+                    | Some _ ->
+                        if t.Status = Submitted then
+                            withReconciledStatus t TaskStatus.Running (rt.Deps.Now ())
+                        else t
+                    | None ->
+                        match t.BranchName with
+                        | Some b when rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
+                            let sha = rt.Deps.RevParseRef rt.ProjectRoot rt.MasterBranch
+                            { (withReconciledStatus t TaskStatus.Merged (rt.Deps.Now ())) with MergedSha = Some sha }
+                        | _ ->
                             if t.Status = Submitted then
                                 withReconciledStatus t TaskStatus.Running (rt.Deps.Now ())
                             else t
-                        | None ->
-                            match t.BranchName with
-                            | Some b when rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
-                                let sha = rt.Deps.RevParseRef rt.ProjectRoot rt.MasterBranch
-                                { (withReconciledStatus t TaskStatus.Merged (rt.Deps.Now ())) with MergedSha = Some sha }
-                            | _ ->
-                                if t.Status = Submitted then
-                                    withReconciledStatus t TaskStatus.Running (rt.Deps.Now ())
-                                else t
-                    else t)
-            
-            rt.Dag <- { currentDag with Tasks = reconciledTasks }
-            rt.Sessions <- sessions
+                else t)
 
+        rt.Dag <- { currentDag with Tasks = reconciledTasks }
+        rt.Sessions <- sessions
+
+        if rt.MasterSessionId <> "" then
             let orphans =
                 rt.Dag.Tasks |> Map.toList |> List.map snd
                 |> List.filter (fun t -> t.Status = Running && t.SlavePid.IsNone)
@@ -96,11 +96,11 @@ let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.
                     if t.Status = Running || t.Status = Submitted then
                         dag |> updateTask t.Id (fun x -> withStatus x Cancelled now)
                     else dag) targetDag
+            let! _ = commitEvent rt (SquadCancelled targetSessionId)
             if targetSessionId = rt.Dag.SessionId then
                 rt.Dag <- updated
             else
                 rt.Sessions <- rt.Sessions.Add(targetSessionId, updated)
-            injectEventFire rt (SquadCancelled targetSessionId)
             schedulerTick rt |> Promise.start
     }
 
@@ -160,69 +160,51 @@ let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : JS.Promise<string> 
             let allRawTasks = fst aggregated
             let hasCancelled = snd aggregated
 
-            // Assign IDs
             let existingTaskIds = rt.Dag.Tasks |> Map.toList |> List.map fst |> Set.ofList
-            let rec genWithRetries (used: Set<string>) (remaining: int) : string option =
-                if remaining <= 0 then None
-                else
-                    let cand = generateTaskId ()
-                    let inExisting = Set.contains cand existingTaskIds
-                    let inUsed = Set.contains cand used
-                    let onRef = rt.Deps.ShowRefExists rt.ProjectRoot cand
-                    if inExisting || inUsed || onRef then genWithRetries used (remaining - 1)
-                    else Some cand
-            let rec assignIds (used: Set<string>) (tasks: (string option * string * string * string list) list) : (string * string * string * string list) list =
-                match tasks with
-                | [] -> []
-                | (idOpt, title, desc, deps) :: rest ->
-                    match idOpt with
-                    | Some id ->
-                        (id, title, desc, deps) :: assignIds (Set.add id used) rest
-                    | None ->
-                        match genWithRetries used 10 with
-                        | Some tid ->
-                            (tid, title, desc, deps) :: assignIds (Set.add tid used) rest
-                        | None ->
-                            let tid = generateTaskId ()
-                            (tid, title, desc, deps) :: assignIds (Set.add tid used) rest
-            let assigned = assignIds existingTaskIds allRawTasks
-
-            // Dangling dependency check
-            let newIds = assigned |> List.map (fun (id, _, _, _) -> id) |> Set.ofList
-            let allIds = Set.union existingTaskIds newIds
-            let dangling =
-                assigned |> List.collect (fun (id, _, _, deps) ->
-                    deps |> List.filter (fun d -> not (Set.contains d allIds))
-                         |> List.map (fun d -> id, d))
-            if dangling <> [] then return formatSquadUpdateOutcome (DependencyErrors dangling)
-            else
-
-            // Cycle detection
-            let depsList = assigned |> List.map (fun (id, _, _, deps) -> id, deps)
-            let existingDeps = rt.Dag.Tasks |> Map.toList |> List.map (fun (id, t) -> id, t.DependsOn)
-            match detectCycle (existingDeps @ depsList) with
-            | Some cycle -> return formatSquadUpdateOutcome (CycleDetected cycle)
-            | None ->
-
-            // Add tasks to DAG
-            let now = rt.Deps.Now ()
-            for (tid, title, desc, deps) in assigned do
-                let task = Wanxiangzhen.Kernel.Task.create tid title desc deps now
-                rt.Dag <- rt.Dag |> addTask task
-
-            // Handle cancellation
-            if hasCancelled then do! handleSquadKill rt None
-
-            // Build result text and inject event
-            let createdTasks = assigned |> List.map (fun (tid, title, desc, deps) -> tid, title, desc, deps)
-            let resultText =
-                if hasCancelled && createdTasks = [] then
-                    sprintf "Squad session %s cancelled." rt.Dag.SessionId
-                else
-                    sprintf "%d task(s) created, scheduler notified." (List.length createdTasks)
-            if createdTasks <> [] then do! injectEvent rt (TasksCreated (rt.Dag.SessionId, createdTasks))
-            schedulerTick rt |> Promise.start |> ignore
-            return resultText
+            let idGen = {
+                Generate = generateTaskId
+                RefExists = fun cand -> rt.Deps.ShowRefExists rt.ProjectRoot cand
+            }
+            match assignTaskIds existingTaskIds allRawTasks idGen with
+            | Error () -> return formatSquadUpdateOutcome IdExhausted
+            | Ok assigned ->
+                return!
+                    (promise {
+                        let newIds = assigned |> List.map (fun (id, _, _, _) -> id) |> Set.ofList
+                        let allIds = Set.union existingTaskIds newIds
+                        let dangling =
+                            assigned |> List.collect (fun (id, _, _, deps) ->
+                                deps |> List.filter (fun d -> not (Set.contains d allIds))
+                                     |> List.map (fun d -> id, d))
+                        if dangling <> [] then
+                            return formatSquadUpdateOutcome (DependencyErrors dangling)
+                        else
+                            let depsList = assigned |> List.map (fun (id, _, _, deps) -> id, deps)
+                            let existingDeps = rt.Dag.Tasks |> Map.toList |> List.map (fun (id, t) -> id, t.DependsOn)
+                            match detectCycle (existingDeps @ depsList) with
+                            | Some cycle -> return formatSquadUpdateOutcome (CycleDetected cycle)
+                            | None ->
+                                let createdTasks = assigned |> List.map (fun (tid, title, desc, deps) -> tid, title, desc, deps)
+                                let! appendOk =
+                                    if createdTasks = [] then Promise.lift (Ok ())
+                                    else commitEvent rt (TasksCreated (rt.Dag.SessionId, createdTasks))
+                                match appendOk with
+                                | Error _ -> return "Error: event log append failed."
+                                | Ok () ->
+                                    if createdTasks <> [] then
+                                        let now = rt.Deps.Now ()
+                                        for (tid, title, desc, deps) in assigned do
+                                            let task = Wanxiangzhen.Kernel.Task.create tid title desc deps now
+                                            rt.Dag <- rt.Dag |> addTask task
+                                    if hasCancelled then do! handleSquadKill rt None
+                                    let resultText =
+                                        if hasCancelled && createdTasks = [] then
+                                            sprintf "Squad session %s cancelled." rt.Dag.SessionId
+                                        else
+                                            sprintf "%d task(s) created, scheduler notified." (List.length createdTasks)
+                                    schedulerTick rt |> Promise.start |> ignore
+                                    return resultText
+                    })
     }
 
 let createWithDeps (client: obj) (directory: string) (config: SquadConfig) (masterBranch: string) (gitError: string option) (deps: CoordinatorDeps) : JS.Promise<CoordinatorRuntime> =
@@ -253,6 +235,8 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
         let depsRef = ref {
             PromptSession        = fun _ _ _ -> Promise.lift ()
             ReadAllTexts         = fun _ _ _ -> Promise.lift []
+            ReadAllSquadEvents   = readAllSquadEvents
+            AppendSquadEvent     = appendSquadEvent
             TryWorktreeAdd       = fun _ _ _ _ -> Ok ""
             TryWorktreeRemoveForce = fun _ _ -> Ok ""
             TryBranchDeleteForce = fun _ _ -> Ok ""
@@ -275,6 +259,8 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
         let deps = {
             PromptSession         = promptSession
             ReadAllTexts          = readAllTexts
+            ReadAllSquadEvents    = readAllSquadEvents
+            AppendSquadEvent      = appendSquadEvent
             TryWorktreeAdd        = tryWorktreeAdd
             TryWorktreeRemoveForce = tryWorktreeRemoveForce
             TryBranchDeleteForce  = tryBranchDeleteForce

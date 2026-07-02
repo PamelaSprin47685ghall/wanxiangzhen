@@ -61,9 +61,9 @@ let testChatMessageCapturesSessionIdAndReplays () : JS.Promise<unit> =
         let sessionId = "squad-session-001"
         let evt1 = SquadCreated (sessionId, "add remember-me")
         let evt2 = TasksCreated (sessionId, [("squad-a1b2", "Task A", "desc A", [])])
-        let history = [ encodeEvent evt1; encodeEvent evt2 ]
+        let history = [ evt1; evt2 ]
 
-        s.readAllTextsOverride <- Some (fun _ sid _ -> Promise.lift history)
+        s.readAllSquadEventsOverride <- Some (fun _ -> Promise.lift history)
 
         // Step 1: chat.message hook sets MasterSessionId (simulate the hook body)
         rt.MasterSessionId <- sessionId
@@ -96,9 +96,9 @@ let testReplayReconcilesSubmittedToMerged () : JS.Promise<unit> =
         let evt2 = TasksCreated (sessionId, [("squad-a1b2", "A", "desc", [])])
         let evt3 = TaskStarted (sessionId, "squad-a1b2", "/wt/a", "squad-a1b2")
         let evt4 = TaskSubmitted (sessionId, "squad-a1b2", "sha123")
-        let history = [ encodeEvent evt1; encodeEvent evt2; encodeEvent evt3; encodeEvent evt4 ]
+        let history = [ evt1; evt2; evt3; evt4 ]
 
-        s.readAllTextsOverride <- Some (fun _ sid _ -> Promise.lift history)
+        s.readAllSquadEventsOverride <- Some (fun _ -> Promise.lift history)
         // MergeBaseIsAncestor: first call returns true → Submitted reconciled to Merged
         s.mergeBaseOverride <- Some (fun c a d -> s.mergeBaseIsAncestorCalls <- s.mergeBaseIsAncestorCalls @ [(c, a, d)]; true)
         // RevParseRef for master branch returns sha for MergedSha
@@ -129,9 +129,9 @@ let testReplayWarnsOrphanRunningTasks () : JS.Promise<unit> =
         let evt1 = SquadCreated (sessionId, "req")
         let evt2 = TasksCreated (sessionId, [("squad-a1b2", "A", "desc", [])])
         let evt3 = TaskStarted (sessionId, "squad-a1b2", "/wt/a", "squad-a1b2")
-        let history = [ encodeEvent evt1; encodeEvent evt2; encodeEvent evt3 ]
+        let history = [ evt1; evt2; evt3 ]
 
-        s.readAllTextsOverride <- Some (fun _ sid _ -> Promise.lift history)
+        s.readAllSquadEventsOverride <- Some (fun _ -> Promise.lift history)
         s.promptSessionOverride <- Some (fun c m p ->
             s.promptSessionCalls <- s.promptSessionCalls @ [(m, p)]
             s.orphanWarningSent <- true
@@ -351,7 +351,11 @@ let testPidPollingDetectsSlaveDeath () : JS.Promise<unit> =
         | None -> check false
         | Some checkFn -> checkFn ()
 
-        // task must be Done
+        do! waitUntil (fun () ->
+            match TestDoubles.findTask "squad-a1b2" rt.Dag with
+            | Some t -> t.Status = Done
+            | None -> false) 2000
+
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
         | None -> check false
         | Some t -> check (t.Status = Done)
@@ -378,19 +382,13 @@ let testWorktreeAddFailureInjectsTaskError () : JS.Promise<unit> =
 
         rt.Scheduling <- false
         do! schedulerTick rt
-        // injectEventFire is fire-and-forget; wait until PromptSession was called
-        do! waitUntil (fun () -> s.promptSessionCalls <> []) 2000
+        do! waitUntil (fun () -> s.appendSquadEventCalls <> []) 2000
 
-        // task must stay Pending
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
         | None -> check false
         | Some t -> check (t.Status = Pending)
 
-        // task_error must have been injected (via injectEventFire → promptSessionCalls)
-        let injected =
-            s.promptSessionCalls
-            |> List.exists (fun (_, msg) -> msg.Contains "task_error" || msg.Contains "squad-a1b2")
-        check injected
+        check (s.appendSquadEventCalls |> List.exists (function TaskError _ -> true | _ -> false))
     }
 
 // ══════════════════════════════════════════════════════════════════════════════

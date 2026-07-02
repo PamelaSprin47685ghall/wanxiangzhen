@@ -56,25 +56,28 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
             let wtPath = parent + "worktree-" + branchName
             match rt.Deps.TryWorktreeAdd rt.ProjectRoot branchName wtPath rt.MasterBranch with
             | Error e ->
-                injectEventFire rt (TaskError (rt.Dag.SessionId, taskId, e))
+                let! _ = commitEvent rt (TaskError (rt.Dag.SessionId, taskId, e))
                 return ()
             | Ok _ ->
-                rt.Deps.CreateSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
-                let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch
-                let slaveEnv = createObj []
-                assignInto slaveEnv (get nodeProcess "env") |> ignore
-                setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
-                setKey slaveEnv "SQUAD_TASK_ID" (box taskId)
-                setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
-                setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
-                setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
-                rt.Deps.SpawnSlave rt.Config.Terminal wtPath slaveEnv prompt
-                let now = rt.Deps.Now ()
-                rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
-                    { (withStatus t Running now) with
-                         WorktreePath = Some wtPath
-                         BranchName = Some branchName })
-                injectEventFire rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, branchName))
+                let! cr = commitEvent rt (TaskStarted (rt.Dag.SessionId, taskId, wtPath, branchName))
+                match cr with
+                | Error _ -> return ()
+                | Ok () ->
+                    rt.Deps.CreateSymlinks wtPath rt.ProjectRoot rt.Config.SharedDirs
+                    let prompt = buildSlavePrompt taskId task.Title task.Description rt.MasterBranch
+                    let slaveEnv = createObj []
+                    assignInto slaveEnv (get nodeProcess "env") |> ignore
+                    setKey slaveEnv "SQUAD_COORDINATOR_URL" (box rt.CoordinatorUrl)
+                    setKey slaveEnv "SQUAD_TASK_ID" (box taskId)
+                    setKey slaveEnv "SQUAD_WORKTREE_PATH" (box wtPath)
+                    setKey slaveEnv "SQUAD_MASTER_BRANCH" (box rt.MasterBranch)
+                    setKey slaveEnv "SQUAD_TOKEN" (box rt.Token)
+                    rt.Deps.SpawnSlave rt.Config.Terminal wtPath slaveEnv prompt
+                    let now = rt.Deps.Now ()
+                    rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
+                        { (withStatus t Running now) with
+                             WorktreePath = Some wtPath
+                             BranchName = Some branchName })
         }
 
 let schedulerTick (rt: CoordinatorRuntime) : JS.Promise<unit> =
@@ -96,11 +99,14 @@ let handleSlaveExit (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit>
         | None -> return ()
         | Some task when isTerminal task.Status -> return ()
         | Some task ->
-            let now = rt.Deps.Now ()
-            rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
-            injectEventFire rt (TaskDone (rt.Dag.SessionId, taskId, false))
-            cleanupTask rt task
-            do! schedulerTick rt
+            let! cr = commitEvent rt (TaskDone (rt.Dag.SessionId, taskId, false))
+            match cr with
+            | Error _ -> return ()
+            | Ok () ->
+                let now = rt.Deps.Now ()
+                rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Done now)
+                cleanupTask rt task
+                do! schedulerTick rt
     }
 
 let safeKillPid (deps: CoordinatorDeps) (pid: int) : unit =
@@ -116,9 +122,13 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
     | Some task ->
         let branchName = task.BranchName |> Option.defaultValue taskId
         promise {
+            let! subCommit = commitEvent rt (TaskSubmitted (rt.Dag.SessionId, taskId, reportedSha))
+            match subCommit with
+            | Error _ ->
+                return { StatusCode = 503; Body = encodeResult "event_log_failed" }
+            | Ok () ->
             let now = rt.Deps.Now ()
             rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Submitted now)
-            injectEventFire rt (TaskSubmitted (rt.Dag.SessionId, taskId, reportedSha))
             let! result =
                 rt.GitQueue.Enqueue(fun () ->
                     promise {
@@ -138,10 +148,15 @@ let handleSubmit (rt: CoordinatorRuntime) (taskId: string) (reportedSha: string)
                                 return RebaseNeeded sha })
             match result with
             | Merged sha ->
-                let n2 = rt.Deps.Now ()
-                rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
-                    { (withStatus t TaskStatus.Merged n2) with MergedSha = Some sha })
-                injectEventFire rt (TaskMerged (rt.Dag.SessionId, taskId, sha))
+                let! mCommit = commitEvent rt (TaskMerged (rt.Dag.SessionId, taskId, sha))
+                match mCommit with
+                | Error _ ->
+                    let n2 = rt.Deps.Now ()
+                    rt.Dag <- rt.Dag |> updateTask taskId (fun t -> withStatus t Running n2)
+                | Ok () ->
+                    let n2 = rt.Deps.Now ()
+                    rt.Dag <- rt.Dag |> updateTask taskId (fun t ->
+                        { (withStatus t TaskStatus.Merged n2) with MergedSha = Some sha })
                 match findTask taskId rt.Dag with
                 | Some t ->
                     match t.SlavePid with

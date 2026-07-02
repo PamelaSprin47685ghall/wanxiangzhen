@@ -5,6 +5,7 @@ open Fable.Core.JsInterop
 open Wanxiangzhen.Kernel.Task
 open Wanxiangzhen.Kernel.Dag
 open Wanxiangzhen.Kernel.SquadConfig
+open Wanxiangzhen.Kernel.SquadEvent
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.SerialQueue
 
@@ -47,6 +48,8 @@ type FakeState = {
     mutable tryWorktreeAddOverride : (string -> string -> string -> string -> Result<string,string>) option
     mutable promptSessionOverride  : (obj -> string -> string -> JS.Promise<unit>) option
     mutable readAllTextsOverride   : (obj -> string -> string -> JS.Promise<string list>) option
+    mutable readAllSquadEventsOverride : (string -> JS.Promise<SquadEvent list>) option
+    mutable appendSquadEventCalls  : SquadEvent list
     mutable startPollingOverride   : (int -> (unit -> unit) -> obj) option
     mutable stopPollingOverride    : (obj -> unit) option
     mutable killPidOverride        : (int -> obj -> unit) option
@@ -92,6 +95,8 @@ let mkFake () : FakeState =
       tryWorktreeAddOverride   = None
       promptSessionOverride    = None
       readAllTextsOverride     = None
+      readAllSquadEventsOverride = None
+      appendSquadEventCalls    = []
       startPollingOverride     = None
       stopPollingOverride      = None
       killPidOverride          = None
@@ -106,6 +111,13 @@ let mkDeps (s: FakeState) : CoordinatorDeps =
             match s.readAllTextsOverride with
             | Some f -> f c sid dir
             | None -> s.readAllTextsCalls <- s.readAllTextsCalls @ [(sid, dir)]; Promise.lift []
+      ReadAllSquadEvents   = fun root ->
+            match s.readAllSquadEventsOverride with
+            | Some f -> f root
+            | None -> Promise.lift []
+      AppendSquadEvent     = fun _ _ e ->
+            s.appendSquadEventCalls <- s.appendSquadEventCalls @ [ e ]
+            Promise.lift (Ok ())
       TryWorktreeAdd       = fun c b p b2 ->
             match s.tryWorktreeAddOverride with
             | Some f -> f c b p b2

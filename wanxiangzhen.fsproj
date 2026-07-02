@@ -6,7 +6,9 @@
     <Compile Include="src/Kernel/Task.fs" />
     <Compile Include="src/Kernel/SquadConfig.fs" />
     <Compile Include="src/Kernel/Dag.fs" />
+    <Compile Include="src/Kernel/SquadUpdateIdAssign.fs" />
     <Compile Include="src/Kernel/SquadEvent.fs" />
+    <Compile Include="src/Kernel/EventLog/Parse.fs" />
     <Compile Include="src/Kernel/Scheduler.fs" />
     <Compile Include="src/Kernel/FfDecision.fs" />
     <Compile Include="src/Kernel/SquadPrompts.fs" />
@@ -15,6 +17,9 @@
     <Compile Include="src/Shell/SerialQueue.fs" />
     <Compile Include="src/Shell/GitShell.fs" />
     <Compile Include="src/Shell/EventCodec.fs" />
+    <Compile Include="src/Shell/SquadEventLogCodec.fs" />
+    <Compile Include="src/Shell/SquadEventLogFiles.fs" />
+    <Compile Include="src/Shell/SquadEventLogRuntime.fs" />
     <Compile Include="src/Shell/ConfigReader.fs" />
     <Compile Include="src/Shell/SessionIo.fs" />
     <Compile Include="src/Shell/HttpCodec.fs" />
@@ -33,6 +38,10 @@
     <Compile Include="tests/EventReplayTests.fs" />
     <Compile Include="tests/SchedulerTests.fs" />
     <Compile Include="tests/EventCodecTests.fs" />
+    <Compile Include="tests/EventLogParseTests.fs" />
+    <Compile Include="tests/SquadEventLogCodecTests.fs" />
+    <Compile Include="tests/SquadUpdateIdAssignTests.fs" />
+    <Compile Include="tests/SquadEventLogFsTests.fs" />
     <Compile Include="tests/FfDecisionTests.fs" />
     <Compile Include="tests/CommandHookTests.fs" />
     <Compile Include="tests/DynTests.fs" />
