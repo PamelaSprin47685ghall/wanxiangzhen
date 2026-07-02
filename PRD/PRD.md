@@ -163,13 +163,14 @@ DAG {
 DAG 状态变更以增量事件写入 coordinator master session 对话历史（决策 2.2/2.4）。一条 user 消息可包含多块 YAML frontmatter（multi-frontmatter），每块 frontmatter 对应一个或一组事件，由 `EventCodec.decodeEvents` 一次解码（§5.4/附录 D）。
 
 ```
-事件类型（共 7 类，详见附录 D.1）:
+事件类型（共 8 类，详见附录 D.1）:
   squad_created     // 万象阵 Session 创建（含原始需求）
   tasks_created     // DAG 拆解产物（multi-frontmatter，一个 tasks 数组）
   task_started      // worktree 创建 + slave 启动
   task_submitted    // slave 调用 submit（进入 ff 检查）
   task_merged       // ff 合并成功
   task_done         // slave 进程退出（merged 或崩溃）
+  task_error        // git/worktree 操作失败（错误注入，不改变 task 状态）
   squad_cancelled   // /squad-kill 触发
 ```
 
@@ -296,7 +297,7 @@ else:                                      → Coordinator 模式
 1. 读主仓库当前分支 `git rev-parse --abbrev-ref HEAD` → masterBranch（核实 5.9）
 2. 读 AGENTS.md frontmatter `squad:` 节（核实 5.10）
 3. 起本地 HTTP server：`http.createServer(handler).listen(0, "127.0.0.1")`，记端口 + 生成随机 bearer token（核实 5.1，安全见 §5.2）
-4. config hook 注册 `/squad`、`/squad-kill` slash command
+4. config hook 注册 `/squad`、`/squad-kill`、`/squad-status` slash command
 5. 注册 `squad_update` 工具
 6. 初始化空内存 DAG；首次拿到 master sessionID 后调 `session.messages` 重放重建（§5.4）
 7. 起 PID 健康轮询定时器（§5.9）
@@ -382,9 +383,9 @@ GET  /task/:id
 POST /task/:id/submit          (slave 完成开发后提交)
   Body: { commitSha: string }  (branch 由 coordinator 从 task.id 映射，slave 不传)
   → 200 { result: "merged",                masterSha: string }
-  → 200 { result: "rebase_needed",         masterSha: string, message: string }
-  → 200 { result: "stale_commit",          message: string }
-  → 200 { result: "coordinator_not_ready", reason: "not_on_master" | "dirty", message: string }
+  → 200 { result: "rebase_needed",         masterSha: string }
+  → 200 { result: "stale_commit" }
+  → 200 { result: "coordinator_not_ready", reason: "not_on_master" | "dirty" }
   → 200 { result: "not_submittable",       currentStatus: string }   (task 非 running，如重复 submit)
   → 404 { result: "task_not_found" }
   handler 流程：① 鉴权 ② task 查找 ③ status≠running → not_submittable（不入队）
@@ -435,6 +436,8 @@ POST /task/:id/log             (可选，第三阶段；slave 报告进度)
 ```
 
 nudge 上限 3 次（同 万象术 `maxNudges`），超限放弃并向用户说明。
+
+> 注：当前代码通过 `squad_created` 事件正文中的指令文本（"Call the squad_update tool..."）作为初始提示，nudge 重试逻辑尚未实现。
 
 ### 5.4 master session 捕获与重放（新增——SSOT 核心）
 
@@ -1237,8 +1240,10 @@ resolveMasterBranch(config, projectRoot):
 |------|------|------|------|
 | Slash Command | `/squad <requirement>` | 触发需求拆解（§5.5）| opencode command registration |
 | Slash Command | `/squad-kill [session_id]` | 杀 slave 进程，保留 worktree（§5.13）| 同上 |
+| Slash Command | `/squad-status` | 显示当前 DAG 状态文本（formatDag）| opencode command registration |
 | Tool | `squad_update` | LLM 提交 DAG 拆解/状态更新（§5.6）| opencode tool definition |
 | 插件 init | HTTP server + Scheduler 启动 | `pluginFor` 内 `listen(0)` + 后台 Scheduler（§5.1）| PluginInput |
+| chat.message hook | 捕获 master sessionID | 首条非空 sessionID 存为 `masterSessionId`，触发 replayFromHistory（§5.4）| PluginInput |
 | **PID 轮询**（非 hook） | slave 退出探测 | **opencode 无 child-exit / session-spawn hook（核实 5.9）**。coordinator 用 `setInterval` 轮询 register 上报的 PID（`process.kill(pid,0)` 探活），消失即 handleSlaveExit | 核实 5.9 |
 | Event 订阅（可选） | `client.event.subscribe` | 监听 opencode session 事件（如 idle）辅助判断；非 slave 生命周期来源 | PluginInput.client |
 
@@ -1359,12 +1364,12 @@ resolveMasterBranch(config, projectRoot):
 - [ ] Slave 退出探测：done beacon `POST /task/:id/done`（正常路径）+ PID 轮询（崩溃兜底）双保险，幂等（§5.9/§6.7）
 - [ ] Slave 模式探测 + `POST /register` 上报 PID + `submit_to_squad`（本地 masterBranch rebase 分支，§6.4）
 - [ ] `/squad-kill [session_id]`（杀进程保留现场，§5.13）
-- [ ] 事件投影：7 类事件 frontmatter 注入 + 注入队列（§5.11/附录 D）
+- [ ] `query_squad` 工具（slave 查全局 DAG，§6.5）
+- [ ] 事件投影：8 类事件 frontmatter 注入 + 注入队列（§5.11/附录 D）
 - [ ] 重启重放：`session.messages()` 全量扫 frontmatter + git 二次校正（§5.3）
 
 ### 14.2 第二阶段（健壮性与协同）
 
-- [ ] `query_squad` 工具（slave 查全局 DAG，§6.5）
 - [ ] 多终端支持（kitty / gnome-terminal / iTerm2 / Windows Terminal / konsole，§5.10）
 - [ ] Headless 降级（无终端时后台 spawn，§5.10）
 - [ ] slave prompt 已固定按 /loop 可用构造（§6.2），不再运行时检测
@@ -1435,9 +1440,9 @@ POST /task/:id/submit
   body { commitSha: string }            # branch 由 coordinator 从 taskId 映射，slave 不传
   # 领域结果全 200 + 单一 result 判别（§5.2）；仅传输/协议错误用 4xx
   200  { result: "merged",                masterSha: string }
-  200  { result: "rebase_needed",         masterSha: string, message: string }
-  200  { result: "stale_commit",          message: string }      # 上报 sha 非 worktree HEAD
-  200  { result: "coordinator_not_ready", reason: "not_on_master"|"dirty", message: string }
+  200  { result: "rebase_needed",         masterSha: string }
+  200  { result: "stale_commit" }                                      # 上报 sha 非 worktree HEAD
+  200  { result: "coordinator_not_ready", reason: "not_on_master"|"dirty" }
   200  { result: "not_submittable",       currentStatus: string } # task 非 running（重复 submit / 已终态）
   401  { result: "unauthorized" }
   404  { result: "task_not_found" }
@@ -1468,10 +1473,10 @@ submit 响应是判别联合的线序编码，slave `submit_to_squad` 按 `resul
 ```
 SubmitResult =                                           # 全部 HTTP 200，单一 result 标签判别（无 ok 字段）
   | Merged           of masterSha: string                # ff 成功，task 完成
-  | RebaseNeeded     of masterSha: string * message: string  # masterBranch 已前进，需本地 rebase
-  | StaleCommit      of message: string                  # commitSha ≠ worktree HEAD，slave 先 commit
-  | CoordinatorNotReady of reason: string * message: string  # coordinator 不在 masterBranch / 工作区脏，稍后重试
-  | NotSubmittable   of currentStatus: string            # task 状态非 running（重复 submit / 已 done/cancelled）
+  | RebaseNeeded     of masterSha: string                # masterBranch 已前进，需本地 rebase
+  | StaleCommit                                           # commitSha ≠ worktree HEAD，slave 先 commit
+  | CoordinatorNotReady of reason: string                 # coordinator 不在 masterBranch / 工作区脏，稍后重试
+  | NotSubmittable   of currentStatus: string             # task 状态非 running（重复 submit / 已 done/cancelled）
 ```
 
 slave 匹配逻辑（§6.4）：
@@ -1480,7 +1485,7 @@ slave 匹配逻辑（§6.4）：
 match result with
 | Merged _            → "✅ Merged. Task complete. You can stop now."（停止工作循环）
 | RebaseNeeded _      → git rebase {masterBranch} → 重 /loop → 重 submit（决策 2.2 do-while）
-| StaleCommit _       → git commit 后重 submit
+| StaleCommit         → git commit 后重 submit
 | CoordinatorNotReady _→ 稍候重试 submit（不改代码，coordinator 主仓库瞬时不可合并）
 | NotSubmittable _    → 向用户报告异常，idle
 ```
@@ -1492,6 +1497,7 @@ SubmitOutcome =                              # slave 工具的完整结果空间
   | Response of SubmitResult                 # HTTP 200，进上面 5 分支匹配
   | TaskNotFound                             # HTTP 404：coordinator 在但不识此 task（多半 coordinator 重启丢状态）→ 报用户、idle
   | CoordinatorUnreachable                   # ECONNREFUSED / 超时：coordinator 崩溃或端口变更 → 报用户、idle（§10.1/§10.5）
+  | LocalGitError of message: string         # 本地 git 操作失败（如 rev-parse 报错）→ 报用户、修复后重试
 ```
 
 `CoordinatorUnreachable` 不是 coordinator 下发的 `result` 值，是 slave 对传输失败的本地分类——故不在 SubmitResult DU 内，单列一轴。slave 先判传输层（成功才有 body），再判 body `result`，两层穷尽匹配，无裸 try-catch 吞错。
@@ -1510,10 +1516,11 @@ SubmitOutcome =                              # slave 工具的完整结果空间
 |-------------|--------|----------|----------|
 | `squad_created` | `/squad` command handler | session_id, requirement | 路径 A（LLM 前）|
 | `tasks_created` | `squad_update` execute | session_id, tasks[{task_id,title,description,depends_on[]}] | 路径 A（LLM 驱动）|
-| `task_started` | Scheduler.tick | session_id, task_id, worktree_path, branch_name, slave_pid | 路径 B（后台）|
+| `task_started` | Scheduler.tick | session_id, task_id, worktree_path, branch_name | 路径 B（后台）|
 | `task_submitted` | `POST /submit` 进入 ff 前 | session_id, task_id, commit_sha | 路径 B |
 | `task_merged` | ff 成功后 | session_id, task_id, master_sha | 路径 B |
 | `task_done` | done beacon / PID 轮询 | session_id, task_id, merged: bool | 路径 B |
+| `task_error` | worktree/git 操作失败 | session_id, task_id, error | 路径 B（后台）|
 | `squad_cancelled` | `/squad-kill` | session_id（可空=全部）| 路径 A/B |
 
 > 注：原 PRD §2.2.4 列 `task_rebased`。修正：rebase 发生在 slave 本地（§6.4），coordinator 不感知 slave 的 rebase 过程，故无 `task_rebased` 事件。slave rebase 后重新 submit，coordinator 只见再次 `task_submitted`。
