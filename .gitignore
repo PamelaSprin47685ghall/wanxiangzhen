@@ -40,6 +40,12 @@ ehthumbs.db
 *.bak
 *.cache
 
+## Workspace event logs (万象术 / 万象阵)
+.wanxiangshu.ndjson
+.wanxiangshu.ndjson.lock
+.wanxiangzhen.ndjson
+.wanxiangzhen.ndjson.lock
+
 ## Environment / secrets
 .env
 .env.*

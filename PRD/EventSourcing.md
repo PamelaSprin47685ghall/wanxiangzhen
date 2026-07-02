@@ -31,7 +31,7 @@ join(workspaceRoot, ".wanxiangzhen.ndjson")
 
 - **追加**：只写文件末尾。
 - **损坏行**：恢复时遇无法解析的非空行 → **截断**（该行及之后丢弃），不跳过坏行继续 fold。
-- **锁**：append 在 **工作区文件锁**（如 `.wanxiangzhen.ndjson.lock` 或等价原语）内串行化，防止多 coordinator 实例交错写；进程内另用 `SerialQueue` 与锁双重保证亦可。
+- **锁**：旁路 **`.wanxiangzhen.ndjson.lock`**（`open(wx)` 独占创建 → `appendFile` 写 NDJSON → 删 lock）。进程内 `SerialQueue` 与 lock 文件双重串行。
 - **启动**：coordinator 激活且需 DAG 投影时，**重放** NDJSON → 填充内存 DAG；**禁止**用「仅读 master session 历史」替代重放作为真相。
 
 ## 3. 行格式（契约）
