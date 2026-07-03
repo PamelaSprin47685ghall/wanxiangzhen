@@ -11,6 +11,7 @@ open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.CoordinatorOps
 open Wanxiangzhen.Shell.CoordinatorLifecycle
+open Wanxiangzhen.Shell.CoordinatorReplay
 open Wanxiangzhen.Shell.SlaveRuntime
 open Wanxiangzhen.Shell.PidMonitor
 open Wanxiangzhen.Shell.HttpCodec
@@ -52,7 +53,7 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
             let sessionId = str input "sessionID"
             if sessionId <> "" && rt.MasterSessionId = "" then
                 rt.MasterSessionId <- sessionId
-                do! replayFromHistory rt
+                do! replayFromEventLog rt
             let requirement = str input "arguments"
             if not rt.Dag.Tasks.IsEmpty && rt.Dag.SessionId <> "" then
                 rt.Sessions <- rt.Sessions.Add(rt.Dag.SessionId, rt.Dag)
@@ -130,7 +131,7 @@ let internal assembleCoordinatorHooks (rt: CoordinatorRuntime) : obj =
                 let sid = str input "sessionID"
                 if sid <> "" then
                     rt.MasterSessionId <- sid
-                    do! replayFromHistory rt
+                    do! replayFromEventLog rt
         }))
     setKey result "dispose" (box (fun () ->
         promise {
@@ -163,7 +164,6 @@ let internal pluginWithDeps (ctx: obj) (deps: CoordinatorDeps) : JS.Promise<{| h
 let private realCoordinatorDeps () : CoordinatorDeps =
     let depsRef = ref {
         PromptSession        = fun _ _ _ -> Promise.lift ()
-        ReadAllTexts         = fun _ _ _ -> Promise.lift []
         ReadAllSquadEvents   = readAllSquadEvents
         AppendSquadEvent     = appendSquadEvent
         TryWorktreeAdd       = fun _ _ _ _ -> Ok ""
@@ -187,7 +187,6 @@ let private realCoordinatorDeps () : CoordinatorDeps =
         Now                  = fun () -> System.DateTime.UtcNow.ToString("o") }
     let deps = {
         PromptSession        = promptSession
-        ReadAllTexts         = readAllTexts
         ReadAllSquadEvents   = readAllSquadEvents
         AppendSquadEvent     = appendSquadEvent
         TryWorktreeAdd       = tryWorktreeAdd

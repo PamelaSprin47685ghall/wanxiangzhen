@@ -29,6 +29,7 @@
     <Compile Include="src/Shell/SymlinkShell.fs" />
     <Compile Include="src/Shell/CoordinatorRuntime.fs" />
     <Compile Include="src/Shell/CoordinatorOps.fs" />
+    <Compile Include="src/Shell/CoordinatorReplay.fs" />
     <Compile Include="src/Shell/CoordinatorLifecycle.fs" />
     <Compile Include="src/Shell/SlaveRuntime.fs" />
     <Compile Include="src/Plugin.fs" />
@@ -56,6 +57,7 @@
       <Compile Include="tests/TestDoubles.fs" />
       <Compile Include="tests/TestFixtures.fs" />
       <Compile Include="tests/CoordinatorLifecycleTests.fs" />
+      <Compile Include="tests/CoordinatorLifecycleEventLogTests.fs" />
     <Compile Include="tests/PluginTests.fs" />
     <Compile Include="tests/ExtendedCoordinatorOpsTests.fs" />
     <Compile Include="tests/GitShellTests.fs" />
@@ -63,7 +65,20 @@
     <Compile Include="tests/SessionIoTests.fs" />
     <Compile Include="tests/PidMonitorTests.fs" />
     <Compile Include="tests/MockE2eTests.fs" />
+    <Compile Include="tests/MockE2eHttpTests.fs" />
+    <Compile Include="tests/ExtendedMockE2eHelpers.fs" />
+    <Compile Include="tests/ExtendedMockE2eReplayTests.fs" />
+    <Compile Include="tests/ExtendedMockE2eSchedulerTests.fs" />
+    <Compile Include="tests/ExtendedMockE2eSubmitTests.fs" />
+    <Compile Include="tests/ExtendedMockE2eSlaveHttpTests.fs" />
+    <Compile Include="tests/ExtendedMockE2ePluginTests.fs" />
     <Compile Include="tests/ExtendedMockE2eTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eHelpers.fs" />
+    <Compile Include="tests/OpencodePluginE2eHooksTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eFlowTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eCancelKillTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eSlaveQueryTests.fs" />
+    <Compile Include="tests/OpencodePluginE2eIdTests.fs" />
     <Compile Include="tests/OpencodePluginE2eTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>

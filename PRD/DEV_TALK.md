@@ -256,11 +256,7 @@ type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
 1. **万象术 确实有丢状态风险**：它的 review 重放依赖 `messages.transform` 的切片（`IfStoreEmpty` 策略），若 `/loop` 激活消息落在 compaction 切点之前，重启后 transform 切片里看不到，review 状态丢失。但 万象术 的 review 是短生命周期（单任务内），切点跨越概率低，实践影响小。
 2. **万象阵 的 DAG 是长生命周期**（跨多任务、贯穿整个 session），compaction 跨越概率高。**因此 万象阵 不能复用 transform-slice 路径重放 DAG**。
 
-**修正方案**（决策 1.3 的落地，不引入 NDJSON）：
-- coordinator 重放 DAG **主动调 `client.session.messages({ sessionID })` 拉全量存储历史**，而非依赖 transform 切片。compaction 不删存储，故全量历史里 DAG 事件消息永久存在。
-- 内存 DAG 为工作态（live projection），每次状态变更经 `session.prompt` 注入事件消息（durable），重启从全量历史折叠重建。
-- **git 作为合并事实的第二真理源**：`task_merged` 的最终判据是 master 是否含该 branch 的提交（`git merge-base --is-ancestor`），即使事件消息丢失也能从 git 反查。这是"信息完整性的最基本尊重"——合并是不可逆事实，落在 git refs 里。
-- 残余风险：用户手动删除 session 或清空历史 → DAG 丢失。等价于 万象术 的同类降级，可接受。
+**曾考虑的修正方案（已废止）**：`session.messages()` 全量重放 + `session.prompt` 写事件。现行实现见下条，**不再**采用该路径。
 
 **用户选择（已废止）**：曾选对话历史为 SSOT + `session.messages()` 全量重放。
 

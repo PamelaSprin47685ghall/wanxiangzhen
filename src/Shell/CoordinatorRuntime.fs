@@ -23,7 +23,6 @@ let killPid (pid: int) (signal: obj) : unit = jsNative
 
 type CoordinatorDeps = {
     PromptSession       : obj -> string -> string -> JS.Promise<unit>
-    ReadAllTexts        : obj -> string -> string -> JS.Promise<string list>
     ReadAllSquadEvents  : string -> JS.Promise<SquadEvent list>
     AppendSquadEvent    : string -> string -> SquadEvent -> JS.Promise<Result<unit, string>>
     TryWorktreeAdd      : string -> string -> string -> string -> Result<string, string>
@@ -100,9 +99,6 @@ let commitEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<Result<uni
                     do! tryPromptWithRetry rt rt.MasterSessionId msg 500 3
                 return Ok ()
         })
-
-let injectEvent (rt: CoordinatorRuntime) (e: SquadEvent) : JS.Promise<unit> =
-    commitEvent rt e |> Promise.map (fun _ -> ())
 
 let rec waitForPidDeath (deps: CoordinatorDeps) (pid: int) (remaining: int) : JS.Promise<unit> =
     if remaining <= 0 then Promise.lift ()

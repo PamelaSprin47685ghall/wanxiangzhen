@@ -259,58 +259,6 @@ let testSquadKillCommand () : JS.Promise<unit> =
         return ()
     }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Test 7 — HTTP transport: bad-token 401 + register updates SlavePid (real server)
-// ══════════════════════════════════════════════════════════════════════════════
-
-let testHttpTransportTokenAndRegister () : JS.Promise<unit> =
-    promise {
-        let s    = TestDoubles.mkFake ()
-        let deps = TestDoubles.mkDeps s
-        let rt   = TestDoubles.mkRuntime deps
-        rt.MasterSessionId <- "squad-session-001"
-
-        // Create one task so /task/:id/register has a target (suppress auto-tick)
-        let evts  = [| TestDoubles.mkTaskEvent "squad-a1b2" "Task A" "desc A" [] |]
-        let args  = TestDoubles.mkSquadUpdateArgs evts
-        rt.Scheduling <- true
-        let! _    = handleSquadUpdate rt args
-        rt.Scheduling <- false
-        do! schedulerTick rt
-
-        // Spin up a real HTTP server (not the in-process routeHandler shim)
-        let! server = startServer rt.Token (routeHandler rt)
-
-        try
-            // ① Bad token → 401 + result=unauthorized
-            let! badResp =
-                TestDoubles.fetchJson (server.Url + "/task/squad-a1b2/register") (createObj [
-                    "method", box "POST"
-                    "headers", box {| Authorization = box "Bearer wrong-token" |}
-                    "body", box (JSON?stringify (createObj [ "pid", box 12345 ])) ])
-            check (badResp.status = 401)
-            check (str badResp.body "result" = "unauthorized")
-
-            // ② Correct token → 200 + registered; SlavePid on task updated
-            let! regResp =
-                TestDoubles.fetchJson (server.Url + "/task/squad-a1b2/register") (createObj [
-                    "method", box "POST"
-                    "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
-                    "body", box (JSON?stringify (createObj [ "pid", box 12345 ])) ])
-            check (regResp.status = 200)
-            check (str regResp.body "result" = "registered")
-
-            match TestDoubles.findTask "squad-a1b2" rt.Dag with
-            | None -> check false
-            | Some t -> check (t.SlavePid = Some 12345)
-        finally
-            server.Close ()
-    }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Public entries
-// ══════════════════════════════════════════════════════════════════════════════
-
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
     ("MockE2e.happy_path: /squad → update → schedule → register → submit → merged",
      testHappyPath)
@@ -329,7 +277,4 @@ let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
 
     ("MockE2e.squad_kill_command: /squad-kill cancels running task, KillPid called, no cleanup",
      testSquadKillCommand)
-
-    ("MockE2e.http_transport_token_register: bad-token 401 + correct-token register updates SlavePid",
-     testHttpTransportTokenAndRegister)
 ]

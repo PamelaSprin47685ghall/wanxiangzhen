@@ -66,7 +66,7 @@ let tryParseLine (line: string) : SquadEvent option =
     if t = "" then None
     else
         try
-            let o = JS.JSON.parse t :?> obj
+            let o = unbox<obj> (JS.JSON.parse t)
             let kind = str o "kind"
             let sid = str o "session"
             let payload = get o "payload"

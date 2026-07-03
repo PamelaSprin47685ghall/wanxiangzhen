@@ -83,7 +83,9 @@ HTTP / hook / squad_update
 
 ## 6. 删除或废弃的行为
 
-| 旧行为 | 新行为 |
+> 下列「旧行为」**已从代码库移除**，仅作迁移对照；实现与文档均以「新行为」为准。
+
+| 旧行为（已删除） | 新行为 |
 |--------|--------|
 | `replayFromHistory` ← `ReadAllTexts` + `decodeEvents` | `replayFromEventLog` ← 读 `.wanxiangzhen.ndjson` + `foldEvents` |
 | `injectEvent` = SSOT 写入 `session.prompt` | `appendSquadEvent` = SSOT；prompt 可选且失败不丢事实 |

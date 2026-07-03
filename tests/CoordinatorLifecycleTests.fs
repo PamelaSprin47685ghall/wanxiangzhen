@@ -9,6 +9,7 @@ open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.SerialQueue
 open Wanxiangzhen.Shell.CoordinatorLifecycle
+open Wanxiangzhen.Shell.CoordinatorReplay
 open Wanxiangzhen.Shell.SquadEventLogCodec
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
@@ -16,7 +17,7 @@ let private mkTask = Wanxiangzhen.Tests.TestDoubles.mkTask
 let private mkTasksCreated = Wanxiangzhen.Tests.TestDoubles.mkTasksCreated
 
 // ══════════════════════════════════════════════════════════════════════════════
-// All tests are async (handleSquadUnit / replayFromHistory return JS.Promise).
+// All tests are async (handleSquadUpdate / replayFromEventLog return JS.Promise).
 // Single entries () list — Tests.fs calls this, not entriesAsync.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -137,11 +138,11 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
         })
 
     // ══════════════════════════════════════════════════════════════════════════
-    // New — replayFromHistory: encoded history + git reconcile → Submitted
+    // New — replayFromEventLog: encoded history + git reconcile → Submitted
     // task upgraded to Merged.  Uses stubDeps + record overrides; no mkFake.
     // ══════════════════════════════════════════════════════════════════════════
 
-    ("replayFromHistory Submitted task with git reconcile → Merged", fun () ->
+    ("replayFromEventLog Submitted task with git reconcile → Merged", fun () ->
         promise {
             let fixedNow = "2025-01-01T00:00:00.0000000Z"
             let baseDeps = stubDeps ()
@@ -159,7 +160,7 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             let rt = mkRuntimeWithDeps deps2
             rt.MasterSessionId <- "squad-session-001"
             rt.GitError       <- None
-            do! replayFromHistory rt
+            do! replayFromEventLog rt
             match findTask "squad-a1b2" rt.Dag with
             | None -> check false
             | Some t ->

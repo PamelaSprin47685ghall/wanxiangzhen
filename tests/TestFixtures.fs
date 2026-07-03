@@ -14,7 +14,6 @@ open Wanxiangzhen.Shell.CoordinatorRuntime
 
 let stubDeps () : CoordinatorDeps =
     { PromptSession        = fun _ _ _ -> Promise.lift ()
-      ReadAllTexts         = fun _ _ _ -> Promise.lift []
       ReadAllSquadEvents   = fun _ -> Promise.lift []
       AppendSquadEvent     = fun _ _ _ -> Promise.lift (Ok ())
       TryWorktreeAdd       = fun _ _ _ _ -> Ok ""

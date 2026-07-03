@@ -24,52 +24,6 @@ open Wanxiangzhen.Shell.Yaml
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Shell.CoordinatorOps
 
-let replayFromHistory (rt: CoordinatorRuntime) : JS.Promise<unit> =
-    promise {
-        let! events = rt.Deps.ReadAllSquadEvents rt.ProjectRoot
-        let mutable currentDag = empty "" ""
-        let mutable sessions = Map.empty
-        for ev in events do
-            match ev with
-            | SquadCreated (sid, req) ->
-                if currentDag.SessionId <> "" && not currentDag.Tasks.IsEmpty then
-                    sessions <- sessions.Add(currentDag.SessionId, currentDag)
-                currentDag <- empty sid req
-            | _ ->
-                currentDag <- foldEvent currentDag ev
-
-        let reconciledTasks =
-            currentDag.Tasks |> Map.map (fun _ t ->
-                if t.Status = Submitted || t.Status = Running then
-                    match rt.GitError with
-                    | Some _ ->
-                        if t.Status = Submitted then
-                            withReconciledStatus t TaskStatus.Running (rt.Deps.Now ())
-                        else t
-                    | None ->
-                        match t.BranchName with
-                        | Some b when rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
-                            let sha = rt.Deps.RevParseRef rt.ProjectRoot rt.MasterBranch
-                            { (withReconciledStatus t TaskStatus.Merged (rt.Deps.Now ())) with MergedSha = Some sha }
-                        | _ ->
-                            if t.Status = Submitted then
-                                withReconciledStatus t TaskStatus.Running (rt.Deps.Now ())
-                            else t
-                else t)
-
-        rt.Dag <- { currentDag with Tasks = reconciledTasks }
-        rt.Sessions <- sessions
-
-        if rt.MasterSessionId <> "" then
-            let orphans =
-                rt.Dag.Tasks |> Map.toList |> List.map snd
-                |> List.filter (fun t -> t.Status = Running && t.SlavePid.IsNone)
-            if orphans <> [] then
-                let names = orphans |> List.map (fun t -> t.Id) |> String.concat ", "
-                let warning = sprintf "WARNING: Orphan running tasks without PID: %s. Use /squad-kill or ignore." names
-                rt.Deps.PromptSession rt.Client rt.MasterSessionId warning |> Promise.start |> ignore
-    }
-
 let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.Promise<unit> =
     promise {
         let targetDagOpt =
@@ -89,19 +43,16 @@ let handleSquadKill (rt: CoordinatorRuntime) (optSessionId: string option) : JS.
                 | _ -> rt.Dag.SessionId
             for t in toKill do
                 t.SlavePid |> Option.iter (safeKillPid rt.Deps)
-            let now = rt.Deps.Now ()
-            let updated =
-                targetDag.Tasks |> Map.toList |> List.map snd
-                |> List.fold (fun dag t ->
-                    if t.Status = Running || t.Status = Submitted then
-                        dag |> updateTask t.Id (fun x -> withStatus x Cancelled now)
-                    else dag) targetDag
-            let! _ = commitEvent rt (SquadCancelled targetSessionId)
-            if targetSessionId = rt.Dag.SessionId then
-                rt.Dag <- updated
-            else
-                rt.Sessions <- rt.Sessions.Add(targetSessionId, updated)
-            schedulerTick rt |> Promise.start
+            let! appendOk = commitEvent rt (SquadCancelled targetSessionId)
+            match appendOk with
+            | Error err -> rt.InjectError <- Some (sprintf "squad_cancelled append failed for %s: %s" targetSessionId err)
+            | Ok () ->
+                let updated = foldEvent targetDag (SquadCancelled targetSessionId)
+                if targetSessionId = rt.Dag.SessionId then
+                    rt.Dag <- updated
+                else
+                    rt.Sessions <- rt.Sessions.Add(targetSessionId, updated)
+                schedulerTick rt |> Promise.start
     }
 
 let handleSquadUpdate (rt: CoordinatorRuntime) (args: obj) : JS.Promise<string> =
@@ -234,7 +185,6 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
                     "master", Some (string ex.Message)
         let depsRef = ref {
             PromptSession        = fun _ _ _ -> Promise.lift ()
-            ReadAllTexts         = fun _ _ _ -> Promise.lift []
             ReadAllSquadEvents   = readAllSquadEvents
             AppendSquadEvent     = appendSquadEvent
             TryWorktreeAdd       = fun _ _ _ _ -> Ok ""
@@ -258,7 +208,6 @@ let create (client: obj) (directory: string) : JS.Promise<CoordinatorRuntime> =
             Now                  = fun () -> System.DateTime.UtcNow.ToString("o") }
         let deps = {
             PromptSession         = promptSession
-            ReadAllTexts          = readAllTexts
             ReadAllSquadEvents    = readAllSquadEvents
             AppendSquadEvent      = appendSquadEvent
             TryWorktreeAdd        = tryWorktreeAdd

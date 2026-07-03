@@ -25,7 +25,7 @@ type FakeState = {
     mutable startPollingCalls      : (int * (unit -> unit)) list
     mutable stopPollingCalls       : obj list
     mutable promptSessionCalls     : (string * string) list
-    mutable readAllTextsCalls      : (string * string) list
+
     mutable tryWorktreeAddCalls    : (string * string * string * string) list
     mutable tryWorktreeRemoveForceCalls : (string * string) list
     mutable tryBranchDeleteForceCalls   : (string * string) list
@@ -47,7 +47,7 @@ type FakeState = {
     mutable statusIsCleanOverride  : (string -> bool) option
     mutable tryWorktreeAddOverride : (string -> string -> string -> string -> Result<string,string>) option
     mutable promptSessionOverride  : (obj -> string -> string -> JS.Promise<unit>) option
-    mutable readAllTextsOverride   : (obj -> string -> string -> JS.Promise<string list>) option
+
     mutable readAllSquadEventsOverride : (string -> JS.Promise<SquadEvent list>) option
     mutable appendSquadEventCalls  : SquadEvent list
     mutable startPollingOverride   : (int -> (unit -> unit) -> obj) option
@@ -72,7 +72,7 @@ let mkFake () : FakeState =
       startPollingCalls        = []
       stopPollingCalls         = []
       promptSessionCalls       = []
-      readAllTextsCalls        = []
+
       tryWorktreeAddCalls      = []
       tryWorktreeRemoveForceCalls = []
       tryBranchDeleteForceCalls   = []
@@ -94,7 +94,7 @@ let mkFake () : FakeState =
       statusIsCleanOverride    = None
       tryWorktreeAddOverride   = None
       promptSessionOverride    = None
-      readAllTextsOverride     = None
+
       readAllSquadEventsOverride = None
       appendSquadEventCalls    = []
       startPollingOverride     = None
@@ -107,10 +107,6 @@ let mkDeps (s: FakeState) : CoordinatorDeps =
             match s.promptSessionOverride with
             | Some f -> f c m p
             | None -> s.promptSessionCalls <- s.promptSessionCalls @ [(m, p)]; Promise.lift ()
-      ReadAllTexts         = fun c sid dir ->
-            match s.readAllTextsOverride with
-            | Some f -> f c sid dir
-            | None -> s.readAllTextsCalls <- s.readAllTextsCalls @ [(sid, dir)]; Promise.lift []
       ReadAllSquadEvents   = fun root ->
             match s.readAllSquadEventsOverride with
             | Some f -> f root

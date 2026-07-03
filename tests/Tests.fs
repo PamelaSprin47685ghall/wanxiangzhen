@@ -34,7 +34,9 @@ let private allSyncTests : (string * (unit -> unit)) list =
 
 let private allAsyncTests : (string * (unit -> JS.Promise<unit>)) list =
     Wanxiangzhen.Tests.CoordinatorLifecycleTests.entries ()
+    @ Wanxiangzhen.Tests.CoordinatorLifecycleEventLogTests.entries ()
     @ Wanxiangzhen.Tests.MockE2eTests.entriesAsync ()
+    @ Wanxiangzhen.Tests.MockE2eHttpTests.entriesAsync ()
     @ Wanxiangzhen.Tests.OpencodePluginE2eTests.entriesAsync ()
     @ Wanxiangzhen.Tests.SlaveRuntimeTests.entriesAsync ()
     @ Wanxiangzhen.Tests.ExtendedMockE2eTests.entriesAsync ()
