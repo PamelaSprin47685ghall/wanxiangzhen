@@ -31,14 +31,31 @@ let private initRepo () : string =
     git dir "commit -m init" |> ignore
     dir
 
+let private initEmptyRepo () : string =
+    let dir = mkdtemp "wanxiangzhen-git-empty-test-"
+    git dir "init -b main" |> ignore
+    git dir "config user.email test@test.com" |> ignore
+    git dir "config user.name test" |> ignore
+    dir
+
 let private cleanup (dir: string) : unit =
     try rmSync dir (createObj [ "recursive", box true; "force", box true ]) with _ -> ()
 
 let entries () : (string * (unit -> unit)) list = [
+    ("hasCommits on empty repo returns false", fun () ->
+        let dir = initEmptyRepo ()
+        equal false (hasCommits dir)
+        cleanup dir)
+
+    ("hasCommits on repo with commit returns true", fun () ->
+        let dir = initRepo ()
+        equal true (hasCommits dir)
+        cleanup dir)
+
     ("revParseHead returns non-empty sha", fun () ->
         let dir = initRepo ()
         let sha = revParseHead dir
-        check (sha.Length > 0)
+        checkBare (sha.Length > 0)
         cleanup dir)
 
     ("revParseBranch returns branch name", fun () ->
@@ -94,9 +111,9 @@ let entries () : (string * (unit -> unit)) list = [
         let wtPath = dir + "/../worktree-test-" + suffix.Substring(suffix.Length - 8)
         try
             worktreeAdd dir "test-branch" wtPath "main"
-            check (showRefExists dir "test-branch")
+            checkBare (showRefExists dir "test-branch")
             worktreeRemoveForce dir wtPath
-            check true
+            checkBare true
         finally
             try rmSync wtPath (createObj [ "recursive", box true; "force", box true ]) with _ -> ()
         cleanup dir)
@@ -123,7 +140,7 @@ let entries () : (string * (unit -> unit)) list = [
         git dir "commit -m feat" |> ignore
         git dir "checkout main" |> ignore
         let shaAfter = mergeFfOnly dir "feature"
-        check (shaAfter <> shaBefore)
+        checkBare (shaAfter <> shaBefore)
         cleanup dir)
 
     ("revParseRef returns ref sha", fun () ->

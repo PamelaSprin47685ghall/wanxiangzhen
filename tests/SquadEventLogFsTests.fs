@@ -39,7 +39,7 @@ let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
                 | SquadCreated (sid, req) ->
                     equal "s1" sid
                     equal "req" req
-                | _ -> check false
+                | _ -> check "" false
             }))
 
     ("SquadEventLogFs.truncate on corrupt tail line", fun () ->

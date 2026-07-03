@@ -60,7 +60,7 @@ let entries () : (string * (unit -> unit)) list = [
         equal "running" (str tasks.[0] "status")
         let deps = unbox<string[]> (get tasks.[0] "dependsOn")
         equal 1 deps.Length
-        check (not (isNullish (get tasks.[0] "slavePid"))))
+        checkBare (not (isNullish (get tasks.[0] "slavePid"))))
 
     ("HttpCodec.encodeFfResponseBody: Merged sha", fun () ->
         let o = encodeFfResponseBody (Merged "sha1") |> unbox<obj>
@@ -75,7 +75,7 @@ let entries () : (string * (unit -> unit)) list = [
     ("HttpCodec.encodeFfResponseBody: StaleCommit no extra", fun () ->
         let o = encodeFfResponseBody StaleCommit |> unbox<obj>
         equal "stale_commit" (str o "result")
-        check (isNullish (get o "masterSha")))
+        checkBare (isNullish (get o "masterSha")))
 
     ("HttpCodec.encodeFfResponseBody: CoordinatorNotReady reason", fun () ->
         let o = encodeFfResponseBody (CoordinatorNotReady "dirty") |> unbox<obj>
@@ -95,13 +95,13 @@ let entries () : (string * (unit -> unit)) list = [
         let body = createObj [ "result" ==> "merged"; "masterSha" ==> "s1" ]
         match decodeFfResult body with
         | Some (Merged sha) -> equal "s1" sha
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeFfResult: RebaseNeeded", fun () ->
         let body = createObj [ "result" ==> "rebase_needed"; "masterSha" ==> "s2" ]
         match decodeFfResult body with
         | Some (RebaseNeeded sha) -> equal "s2" sha
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeFfResult: StaleCommit", fun () ->
         let body = createObj [ "result" ==> "stale_commit" ]
@@ -111,13 +111,13 @@ let entries () : (string * (unit -> unit)) list = [
         let body = createObj [ "result" ==> "coordinator_not_ready"; "reason" ==> "dirty" ]
         match decodeFfResult body with
         | Some (CoordinatorNotReady r) -> equal "dirty" r
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeFfResult: NotSubmittable", fun () ->
         let body = createObj [ "result" ==> "not_submittable"; "currentStatus" ==> "done" ]
         match decodeFfResult body with
         | Some (NotSubmittable s) -> equal "done" s
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeFfResult: unknown returns None", fun () ->
         let body = createObj [ "result" ==> "bogus" ]
@@ -127,7 +127,7 @@ let entries () : (string * (unit -> unit)) list = [
         let body = createObj [ "commitSha" ==> "abc123" ]
         match decodeSubmitBody body with
         | Some sha -> equal "abc123" sha
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeSubmitBody: without commitSha", fun () ->
         let body = createObj []
@@ -137,7 +137,7 @@ let entries () : (string * (unit -> unit)) list = [
         let body = createObj [ "pid" ==> 9999 ]
         match decodeRegisterBody body with
         | Some pid -> equal 9999 pid
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeRegisterBody: without pid", fun () ->
         let body = createObj []
@@ -147,7 +147,7 @@ let entries () : (string * (unit -> unit)) list = [
         let body = createObj [ "message" ==> "hello" ]
         match decodeLogBody body with
         | Some msg -> equal "hello" msg
-        | _ -> check false)
+        | _ -> checkBare false)
 
     ("HttpCodec.decodeLogBody: without message", fun () ->
         let body = createObj []

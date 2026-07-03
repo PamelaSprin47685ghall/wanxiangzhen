@@ -27,11 +27,11 @@ let testChatMessageCapturesSessionIdAndReplays () : JS.Promise<unit> =
         rt.MasterSessionId <- sessionId
         do! replayFromEventLog rt
 
-        check (rt.MasterSessionId = sessionId)
+        checkBare (rt.MasterSessionId = sessionId)
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Pending)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Pending)
      }
 
 let testReplayReconcilesSubmittedToMerged () : JS.Promise<unit> =
@@ -55,10 +55,10 @@ let testReplayReconcilesSubmittedToMerged () : JS.Promise<unit> =
         do! replayFromEventLog rt
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
+        | None -> checkBare false
         | Some t ->
-            check (t.Status = Merged)
-            check (t.MergedSha = Some "merged-sha")
+            checkBare (t.Status = Merged)
+            checkBare (t.MergedSha = Some "merged-sha")
     }
 
 let testReplayWarnsOrphanRunningTasks () : JS.Promise<unit> =
@@ -84,12 +84,12 @@ let testReplayWarnsOrphanRunningTasks () : JS.Promise<unit> =
         do! replayFromEventLog rt
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Running)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Running)
 
-        check s.orphanWarningSent
+        checkBare s.orphanWarningSent
         let callMsg = s.promptSessionCalls |> List.tryHead |> Option.map snd |> Option.defaultValue ""
-        check (callMsg.Contains "orphan" || callMsg.Contains "Orphan")
+        checkBare (callMsg.Contains "orphan" || callMsg.Contains "Orphan")
     }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

@@ -10,7 +10,7 @@ let private selfPid : int = jsNative
 
 let entries () : (string * (unit -> unit)) list = [
     ("PidMonitor.isPidAlive self returns true", fun () ->
-        check (isPidAlive selfPid))
+        checkBare (isPidAlive selfPid))
 
     ("PidMonitor.isPidAlive invalid PID returns false", fun () ->
         equal false (isPidAlive 2147483647))
@@ -18,5 +18,5 @@ let entries () : (string * (unit -> unit)) list = [
     ("PidMonitor.startPolling/stopPolling does not throw", fun () ->
         let handle = startPolling 1000 (fun () -> ())
         stopPolling handle
-        check true)
+        checkBare true)
 ]

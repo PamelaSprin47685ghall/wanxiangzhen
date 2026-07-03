@@ -8,6 +8,7 @@ open Wanxiangzhen.Shell.Dyn
 open Wanxiangzhen.Shell.CoordinatorRuntime
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestFixtures
+open Wanxiangzhen.Tests.SpinWait
 
 // Process / env helpers (slave mode needs SQUAD_* env vars)
 [<Global("process")>]
@@ -131,15 +132,7 @@ let internal mkObservableDeps (captures: MockCaptures) (obs: ObservableDeps) : C
 
 // waitForScheduler — polls rt.Dag until a task transitions Pending→Running
 let internal waitForScheduler (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<unit> =
-    let rec loop remaining =
-        if remaining <= 0 then
-            check false
-            Promise.lift ()
-        else
-            match rt.Dag.Tasks |> Map.tryFind taskId with
-            | Some t ->
-                if t.Status = Running then Promise.lift ()
-                else Promise.sleep 10 |> Promise.bind (fun () -> loop (remaining - 1))
-            | None ->
-                Promise.sleep 10 |> Promise.bind (fun () -> loop (remaining - 1))
-    loop 50
+    spinUntil (fun () ->
+        match rt.Dag.Tasks |> Map.tryFind taskId with
+        | Some t -> t.Status = Running
+        | None -> false) 500

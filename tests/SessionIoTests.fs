@@ -10,20 +10,20 @@ let entries () : (string * (unit -> unit)) list = [
     ("getSession with session prop returns Ok", fun () ->
         let client = createObj [ "session", box (createObj []) ]
         match getSession client with
-        | Ok _ -> check true
-        | Error _ -> check false)
+        | Ok _ -> checkBare true
+        | Error _ -> checkBare false)
 
     ("getSession with null session returns Error", fun () ->
         let client = createObj [ "session", box null ]
         match getSession client with
-        | Ok _ -> check false
-        | Error msg -> check (msg.Contains "missing"))
+        | Ok _ -> checkBare false
+        | Error msg -> checkBare (msg.Contains "missing"))
 
     ("getSession without session prop returns Error", fun () ->
         let client = createObj []
         match getSession client with
-        | Ok _ -> check false
-        | Error msg -> check (msg.Contains "missing"))
+        | Ok _ -> checkBare false
+        | Error msg -> checkBare (msg.Contains "missing"))
 
     ("clientId returns sessionID value", fun () ->
         let input = createObj [ "sessionID", box "sid-1" ]

@@ -14,21 +14,21 @@ let entries () : (string * (unit -> unit)) list = [
         isNone defaults.MasterBranch)
 
     ("defaults.SharedDirs=[]", fun () ->
-        check defaults.SharedDirs.IsEmpty)
+        check "" defaults.SharedDirs.IsEmpty)
 
     ("mergeWithDefaults None → defaults", fun () ->
         let cfg = mergeWithDefaults None
         equal 3 cfg.MaxConcurrent
         equal "alacritty" cfg.Terminal
         isNone cfg.MasterBranch
-        check cfg.SharedDirs.IsEmpty)
+        check "" cfg.SharedDirs.IsEmpty)
 
     ("mergeWithDefaults empty fields → defaults", fun () ->
         let cfg = mergeWithDefaults (Some { MaxConcurrent = 0; Terminal = ""; MasterBranch = None; SharedDirs = [] })
         equal 3 cfg.MaxConcurrent
         equal "alacritty" cfg.Terminal
         isNone cfg.MasterBranch
-        check cfg.SharedDirs.IsEmpty)
+        check "" cfg.SharedDirs.IsEmpty)
 
     ("mergeWithDefaults all custom values preserved", fun () ->
         let cfg = mergeWithDefaults (Some { MaxConcurrent = 5; Terminal = "kitty"; MasterBranch = Some "main"; SharedDirs = ["node_modules"] })
@@ -42,5 +42,5 @@ let entries () : (string * (unit -> unit)) list = [
         equal 3 cfg.MaxConcurrent
         equal "alacritty" cfg.Terminal
         isNone cfg.MasterBranch
-        check cfg.SharedDirs.IsEmpty)
+        check "" cfg.SharedDirs.IsEmpty)
 ]

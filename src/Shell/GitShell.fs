@@ -39,6 +39,19 @@ let revParseBranch (cwd: string) : string = runStdout cwd [| "rev-parse"; "--abb
 
 let isDetached (cwd: string) : bool = revParseBranch cwd = "HEAD"
 
+let hasCommits (cwd: string) : bool =
+    try
+        revParseHead cwd |> ignore
+        true
+    with _ -> false
+
+let verifyBaseBranch (cwd: string) (baseBranch: string) : Result<string, string> =
+    try
+        let resolved = runStdout cwd [| "rev-parse"; "--verify"; "refs/heads/" + baseBranch |]
+        Ok resolved
+    with ex ->
+        Error (string ex.Message)
+
 let mergeBaseIsAncestor (cwd: string) (ancestor: string) (descendant: string) : bool =
     try
         runStdout cwd [| "merge-base"; "--is-ancestor"; ancestor; descendant |] |> ignore

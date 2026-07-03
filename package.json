@@ -14,7 +14,10 @@
   },
   "files": ["build"],
   "scripts": {
-    "build-and-test": "dotnet fable wanxiangzhen.fsproj --outDir build && rm -f build/fable_modules/.gitignore && cp build-package.json build/package.json && node tests/runner.js"
+    "ci": "npm run build-and-test && npm run e2e",
+    "e2e:stress": "bash scripts/e2e-stress.sh",
+    "build-and-test": "dotnet fable wanxiangzhen.fsproj --outDir build && rm -f build/fable_modules/.gitignore && cp build-package.json build/package.json && mkdir -p build/e2e && cp e2e/*.js build/e2e/ && sed -i 's|../../e2e/harness.js|./harness.js|g' build/e2e/Tests.js && node tests/runner.js",
+    "e2e": "dotnet fable wanxiangzhen.fsproj --outDir build --noCache && rm -f build/fable_modules/.gitignore && cp build-package.json build/package.json && mkdir -p build/e2e && cp e2e/*.js build/e2e/ && sed -i 's|../../e2e/harness.js|./harness.js|g' build/e2e/Tests.js && if [ \"$OPENCODE_E2E\" = \"1\" ]; then echo 'OPENCODE_E2E=1 → opencode serve mode'; else export WANXIANGZHEN_E2E_INPROCESS=1; fi && node tests/runner.js --e2e"
   },
   "dependencies": {
     "@fable-org/fable-library-js": "^2.1.1",

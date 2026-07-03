@@ -18,24 +18,24 @@ let private mkUndef : obj = Unchecked.defaultof<obj>
 let entries () : (string * (unit -> unit)) list = [
 
     ("Dyn.isNullish null", fun () ->
-        check (isNullish mkNull))
+        checkBare (isNullish mkNull))
 
     ("Dyn.isNullish undefined", fun () ->
-        check (isNullish mkUndef))
+        checkBare (isNullish mkUndef))
 
     ("Dyn.isNullish emptyString", fun () ->
-        check (not (isNullish "")))
+        checkBare (not (isNullish "")))
 
     ("Dyn.isNullish obj", fun () ->
         let o = mkObj ["x" ==> box 1]
-        check (not (isNullish o)))
+        checkBare (not (isNullish o)))
 
     ("Dyn.keys returns key array", fun () ->
         let o = mkObj ["a" ==> box 1; "b" ==> box 2]
         let k = keys o
-        check (k.Length = 2)
-        check (Seq.exists (fun key -> key = "a") k)
-        check (Seq.exists (fun key -> key = "b") k))
+        checkBare (k.Length = 2)
+        checkBare (Seq.exists (fun key -> key = "a") k)
+        checkBare (Seq.exists (fun key -> key = "b") k))
 
     ("Dyn.get existing key", fun () ->
         let o = mkObj ["x" ==> box 42]
@@ -43,7 +43,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dyn.get missing key returns undefinedValue", fun () ->
         let o = mkObj ["x" ==> box 1]
-        check (isNullish (get o "no-such-key")))
+        checkBare (isNullish (get o "no-such-key")))
 
     ("Dyn.str existing returns string", fun () ->
         let o = mkObj ["s" ==> "hello"]
@@ -63,45 +63,45 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dyn.has existing -> true", fun () ->
         let o = mkObj ["k" ==> box 1]
-        check (has o "k"))
+        checkBare (has o "k"))
 
     ("Dyn.has missing -> false", fun () ->
         let o = mkObj ["k" ==> box 1]
-        check (not (has o "no-such-key")))
+        checkBare (not (has o "no-such-key")))
 
     ("Dyn.typeIs object", fun () ->
         let o = mkObj []
-        check (typeIs o "object"))
+        checkBare (typeIs o "object"))
 
     ("Dyn.isArray true for array", fun () ->
-        check (isArray jsArray))
+        checkBare (isArray jsArray))
 
     ("Dyn.isArray false for non-array", fun () ->
         let o = mkObj ["x" ==> box 1]
-        check (not (isArray o)))
+        checkBare (not (isArray o)))
 
     ("Dyn.truthy null false", fun () ->
-        check (not (truthy mkNull)))
+        checkBare (not (truthy mkNull)))
 
     ("Dyn.truthy 0 false", fun () ->
-        check (not (truthy (box 0))))
+        checkBare (not (truthy (box 0))))
 
     ("Dyn.truthy emptyString false", fun () ->
-        check (not (truthy "")))
+        checkBare (not (truthy "")))
 
     ("Dyn.truthy true", fun () ->
-        check (truthy (box true)))
+        checkBare (truthy (box true)))
 
     ("Dyn.truthy emptyObject true", fun () ->
-        check (truthy (mkObj [])))
+        checkBare (truthy (mkObj [])))
 
     ("Dyn.withKey adds key to new object", fun () ->
         let o = mkObj ["a" ==> box 1]
         let c = withKey o "b" (box 2)
-        check (has c "b")
+        checkBare (has c "b")
         equal 2 (unbox<int> (get c "b"))
         // original unchanged
-        check (not (has o "b")))
+        checkBare (not (has o "b")))
 
     ("Dyn.cloneShallow independent copy", fun () ->
         let o = mkObj ["x" ==> box 1]
@@ -119,5 +119,5 @@ let entries () : (string * (unit -> unit)) list = [
     ("Dyn.deleteKey removes key", fun () ->
         let o = mkObj ["k" ==> box 1]
         deleteKey o "k"
-        check (not (has o "k")))
+        checkBare (not (has o "k")))
 ]

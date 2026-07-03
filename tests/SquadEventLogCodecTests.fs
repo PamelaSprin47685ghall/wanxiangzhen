@@ -15,7 +15,7 @@ let entries () : (string * (unit -> unit)) list = [
             let (tid, _, _, deps) = decoded.[0]
             equal "a1" tid
             equal [ "x" ] deps
-        | _ -> check false)
+        | _ -> check "" false)
 
     ("SquadEventLog.squad_created round-trip", fun () ->
         let line = squadEventToLine "t" (SquadCreated ("s1", "req"))
@@ -23,5 +23,5 @@ let entries () : (string * (unit -> unit)) list = [
         | Some (SquadCreated (sid, req)) ->
             equal "s1" sid
             equal "req" req
-        | _ -> check false)
+        | _ -> check "" false)
 ]

@@ -33,10 +33,10 @@ let testWorktreeAddFailureInjectsTaskError () : JS.Promise<unit> =
         do! waitUntil (fun () -> s.appendSquadEventCalls <> []) 2000
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Pending)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Pending)
 
-        check (s.appendSquadEventCalls |> List.exists (function TaskError _ -> true | _ -> false))
+        checkBare (s.appendSquadEventCalls |> List.exists (function TaskError _ -> true | _ -> false))
     }
 
 let testMergedWithAlreadyDeadSlaveDoesNotCrash () : JS.Promise<unit> =
@@ -61,18 +61,18 @@ let testMergedWithAlreadyDeadSlaveDoesNotCrash () : JS.Promise<unit> =
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-a1b2", "deadbeef")
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
 
-        check (resp.StatusCode = 200)
-        check ((str resp.Body "result") = "merged")
+        checkBare (resp.StatusCode = 200)
+        checkBare ((str resp.Body "result") = "merged")
 
-        check s.killPidCalled
-        check (s.killPidPid = Some 12345)
+        checkBare s.killPidCalled
+        checkBare (s.killPidPid = Some 12345)
 
-        check (s.tryWorktreeRemoveForceCalls <> [])
-        check (s.tryBranchDeleteForceCalls <> [])
+        checkBare (s.tryWorktreeRemoveForceCalls <> [])
+        checkBare (s.tryBranchDeleteForceCalls <> [])
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Merged)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Merged)
     }
 
 let testSubmitRebaseNeededReturnsRunning () : JS.Promise<unit> =
@@ -95,12 +95,12 @@ let testSubmitRebaseNeededReturnsRunning () : JS.Promise<unit> =
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-a1b2", "deadbeef")
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
 
-        check (resp.StatusCode = 200)
-        check ((str resp.Body "result") = "rebase_needed")
+        checkBare (resp.StatusCode = 200)
+        checkBare ((str resp.Body "result") = "rebase_needed")
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Running)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Running)
      }
 
 let testSubmitStaleCommit () : JS.Promise<unit> =
@@ -122,12 +122,12 @@ let testSubmitStaleCommit () : JS.Promise<unit> =
 
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
 
-        check (resp.StatusCode = 200)
-        check ((str resp.Body "result") = "stale_commit")
+        checkBare (resp.StatusCode = 200)
+        checkBare ((str resp.Body "result") = "stale_commit")
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Running)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Running)
      }
 
 let testSubmitCoordinatorNotReadyDirty () : JS.Promise<unit> =
@@ -150,12 +150,12 @@ let testSubmitCoordinatorNotReadyDirty () : JS.Promise<unit> =
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-a1b2", "deadbeef")
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
 
-        check (resp.StatusCode = 200)
-        check ((str resp.Body "result") = "coordinator_not_ready")
+        checkBare (resp.StatusCode = 200)
+        checkBare ((str resp.Body "result") = "coordinator_not_ready")
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Running)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Running)
      }
 
 let testHttpTaskNotFound404 () : JS.Promise<unit> =
@@ -166,8 +166,8 @@ let testHttpTaskNotFound404 () : JS.Promise<unit> =
         rt.MasterSessionId <- "squad-session-001"
 
         let! resp = routeHandler rt "GET" "/task/unknown-task-id" (createObj [])
-        check (resp.StatusCode = 404)
-        check ((str resp.Body "result") = "task_not_found")
+        checkBare (resp.StatusCode = 404)
+        checkBare ((str resp.Body "result") = "task_not_found")
     }
 
 let testHttpBadRegisterBody400 () : JS.Promise<unit> =
@@ -185,8 +185,8 @@ let testHttpBadRegisterBody400 () : JS.Promise<unit> =
         do! schedulerTick rt
 
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/register" (createObj [])
-        check (resp.StatusCode = 400)
-        check ((str resp.Body "result") = "bad_request")
+        checkBare (resp.StatusCode = 400)
+        checkBare ((str resp.Body "result") = "bad_request")
     }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

@@ -32,7 +32,6 @@ let entries () : (string * (unit -> unit)) list = [
             let! r1 =
                 q.Enqueue(fun () ->
                     promise {
-                        do! Promise.sleep 10
                         return failwith "intentional" })
                 |> Promise.catch (fun _ -> None)
             let! r2 = q.Enqueue(fun () -> promise { return "ok" })
@@ -44,7 +43,6 @@ let entries () : (string * (unit -> unit)) list = [
         Promise.start <| promise {
             let! r =
                 withTimeout 5000 (promise {
-                    do! Promise.sleep 10
                     return "done" })
             isSome r
             equal "done" r.Value
@@ -54,9 +52,9 @@ let entries () : (string * (unit -> unit)) list = [
         Promise.start <| promise {
             let work =
                 promise {
-                    do! Promise.sleep 2000
-                    return "too late" }
-            let! r = withTimeout 50 work
+                    return! Promise.create (fun _ _ -> ())
+                }
+            let! r = withTimeout 1 work
             isNone r
         })
 ]

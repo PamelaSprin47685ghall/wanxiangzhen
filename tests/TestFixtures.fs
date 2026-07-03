@@ -27,6 +27,7 @@ let stubDeps () : CoordinatorDeps =
       StatusIsClean        = fun _ -> true
       MergeBaseIsAncestor  = fun _ _ _ -> false
       MergeFfOnly          = fun _ _ -> ""
+      HasCommits           = fun _ -> true
       CreateSymlinks       = fun _ _ _ -> ()
       SpawnSlave           = fun _ _ _ _ -> ()
       IsPidAlive           = fun _ -> false

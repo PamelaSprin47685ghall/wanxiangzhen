@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  e2e-inprocess:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+      - run: npm run ci
+
+  # e2e-opencode:
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     OPENCODE_E2E: '1'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         cache: 'npm'
+  #     - uses: actions/setup-dotnet@v4
+  #       with:
+  #         dotnet-version: '8.0.x'
+  #     - name: Install dependencies
+  #       run: |
+  #         if [ -f package-lock.json ]; then
+  #           npm ci
+  #         else
+  #           npm install
+  #         fi
+  #     - run: npm run build-and-test
+  #     - name: Verify opencode CLI
+  #       run: command -v opencode || (echo "opencode CLI required for e2e-opencode" && exit 1)
+  #     - run: OPENCODE_E2E=1 npm run e2e

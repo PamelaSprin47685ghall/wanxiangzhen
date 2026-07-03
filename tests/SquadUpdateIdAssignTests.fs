@@ -12,7 +12,7 @@ let entries () : (string * (unit -> unit)) list = [
         }
         match assignTaskIds Set.empty [ (None, "t", "d", []) ] gen with
         | Error () -> ()
-        | Ok _ -> check false)
+        | Ok _ -> check "" false)
 
     ("assignTaskIds assigns when ref free", fun () ->
         let gen =
@@ -20,5 +20,5 @@ let entries () : (string * (unit -> unit)) list = [
               RefExists = (fun _ -> false) }
         match assignTaskIds Set.empty [ (None, "t", "d", []) ] gen with
         | Ok [ (id, _, _, _) ] -> equal "squad-abcd" id
-        | _ -> check false)
+        | _ -> check "" false)
 ]

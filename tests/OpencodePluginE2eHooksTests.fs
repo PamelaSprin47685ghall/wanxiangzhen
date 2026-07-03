@@ -16,10 +16,10 @@ let testPluginHooksShape () : JS.Promise<unit> =
         let deps = mkObservableDeps captures obs
         let! result = pluginWithDeps input deps
         let h = result.hooks
-        check (not (isNullish (get h "tool")))
-        check (not (isNullish (get h "config")))
-        check (not (isNullish (get h "command.execute.before")))
-        check (not (isNullish (get h "dispose")))
+        checkBare (not (isNullish (get h "tool")))
+        checkBare (not (isNullish (get h "config")))
+        checkBare (not (isNullish (get h "command.execute.before")))
+        checkBare (not (isNullish (get h "dispose")))
     }
 
 // Test 2 — config hook registers /squad /squad-kill /squad-status commands
@@ -34,12 +34,12 @@ let testConfigHookRegistersCommands () : JS.Promise<unit> =
         let cfg = createObj [ "command", box (createObj []) ]
         do! unbox<JS.Promise<unit>> (configHook $ (cfg))
         let cmds = get cfg "command"
-        check (not (isNullish (get cmds "squad")))
-        check (not (isNullish (get cmds "squad-kill")))
-        check (not (isNullish (get cmds "squad-status")))
+        checkBare (not (isNullish (get cmds "squad")))
+        checkBare (not (isNullish (get cmds "squad-kill")))
+        checkBare (not (isNullish (get cmds "squad-status")))
         let squadCmd = get cmds "squad"
-        check ((str squadCmd "template") <> "")
-        check ((str squadCmd "description") <> "")
+        checkBare ((str squadCmd "template") <> "")
+        checkBare ((str squadCmd "description") <> "")
     }
 
 // Test 3 — dispose returns a thenable

@@ -24,12 +24,12 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             rt.Dag <- rt.Dag |> updateTask "squad-a1b2" (fun t -> { t with Status = Running; UpdatedAt = now })
             do! handleSquadKill rt None
             match findTask "squad-a1b2" rt.Dag with
-            | None -> check false
-            | Some t -> check (t.Status = Running)
-            check (rt.InjectError.IsSome)
+            | None -> checkBare false
+            | Some t -> checkBare (t.Status = Running)
+            checkBare (rt.InjectError.IsSome)
             match rt.InjectError with
-            | Some msg -> check (msg.Contains "append failed")
-            | None -> check false
+            | Some msg -> checkBare (msg.Contains "append failed")
+            | None -> checkBare false
         })
 
     ("handleSquadUpdate append fail → Dag unchanged + error text", fun () ->
@@ -38,11 +38,12 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
                 { stubDeps () with
                     AppendSquadEvent = fun _ _ _ -> Promise.lift (Error "test-append-failure") }
             let rt = mkRuntimeWithDeps failDeps
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "Desc A" [] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (rt.Dag.Tasks.IsEmpty)
-            check (result.Contains "append failed")
+            checkBare (rt.Dag.Tasks.IsEmpty)
+            checkBare (result.Contains "append failed")
         })
 
     ("handleSquadKill Ok → Pending and Running both Cancelled (foldEvent parity)", fun () ->
@@ -55,7 +56,7 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             rt.Dag <- rt.Dag |> updateTask "squad-run" (fun t -> { t with Status = Running })
             do! handleSquadKill rt None
             match findTask "squad-pend" rt.Dag, findTask "squad-run" rt.Dag with
-            | Some p, Some r -> check (p.Status = Cancelled && r.Status = Cancelled)
-            | _ -> check false
+            | Some p, Some r -> checkBare (p.Status = Cancelled && r.Status = Cancelled)
+            | _ -> checkBare false
         })
 ]

@@ -41,10 +41,10 @@ let entries () : (string * (unit -> unit)) list = [
     ("formatDagText returns empty-DAG text", fun () ->
         let rt = mkRuntime ()
         let text = formatDagText rt
-        check (text.Contains "no tasks"))
+        checkBare (text.Contains "no tasks"))
 
     ("startPidPolling records handle without crashing", fun () ->
         let rt = mkRuntime ()
         startPidPolling rt
-        check (rt.PidPollHandle.IsSome))
+        checkBare (rt.PidPollHandle.IsSome))
 ]

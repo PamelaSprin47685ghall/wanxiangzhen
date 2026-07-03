@@ -40,8 +40,8 @@ let testSlaveModeQuerySquad () : JS.Promise<unit> =
         do! schedulerTick rt
         do! waitForScheduler rt "squad-query-01"
 
-        check (obs.worktreeAddCalls.Length = 1)
-        check (obs.spawnSlaveCalls.Length  = 1)
+        checkBare (obs.worktreeAddCalls.Length = 1)
+        checkBare (obs.spawnSlaveCalls.Length  = 1)
 
         // ② capture coordinator URL + token for slave env
         let coordinatorUrl   = rt.CoordinatorUrl
@@ -66,8 +66,8 @@ let testSlaveModeQuerySquad () : JS.Promise<unit> =
             let tools        = get slaveHooks "tool"
 
             // ⑥ hooks must contain both slave tools
-            check (not (isNullish (get tools "submit_to_squad")))
-            check (not (isNullish (get tools "query_squad")))
+            checkBare (not (isNullish (get tools "submit_to_squad")))
+            checkBare (not (isNullish (get tools "query_squad")))
 
             // ⑦ execute query_squad "state" — hits coordinator HTTP server
             let qsTool    = get tools "query_squad"
@@ -76,7 +76,7 @@ let testSlaveModeQuerySquad () : JS.Promise<unit> =
             let qsArgs    = createObj [ "query", box "state" ]
             let! qsResp   = qsExecFn.Invoke(qsArgs, createObj [])
 
-            check (qsResp.Contains "squad-query-01")
+            checkBare (qsResp.Contains "squad-query-01")
         finally
             clearEnv "SQUAD_COORDINATOR_URL"
             clearEnv "SQUAD_TASK_ID"

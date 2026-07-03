@@ -14,7 +14,7 @@ let entries () : (string * (unit -> unit)) list = [
     ("Scheduler.empty dag", fun () ->
         let d = empty "s1" ""
         let dec = decide d 3
-        check dec.TasksToStart.IsEmpty)
+        checkBare dec.TasksToStart.IsEmpty)
 
     ("Scheduler.one ready", fun () ->
         let d = empty "s1" "" |> addTask (mkTask "a" [] Pending)
@@ -34,14 +34,14 @@ let entries () : (string * (unit -> unit)) list = [
                 |> addTask (mkTask "dep" [] Pending)
                 |> addTask (mkTask "a" ["dep"] Pending)
         let dec = decide d 3
-        check (not (dec.TasksToStart |> List.contains "a")))
+        checkBare (not (dec.TasksToStart |> List.contains "a")))
 
     ("Scheduler.dep merged starts dependent", fun () ->
         let d = empty "s1" ""
                 |> addTask (mkTask "dep" [] Merged)
                 |> addTask (mkTask "a" ["dep"] Pending)
         let dec = decide d 3
-        check (dec.TasksToStart |> List.contains "a"))
+        checkBare (dec.TasksToStart |> List.contains "a"))
 
     ("Scheduler.full concurrency", fun () ->
         let d = empty "s1" ""

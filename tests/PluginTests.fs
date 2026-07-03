@@ -16,7 +16,7 @@ let entries () : (string * (unit -> unit)) list = [
         let part = box "hello"
         mutateOutputParts output part
         let parts = get output "parts"
-        check (not (isNullish parts))
+        checkBare (not (isNullish parts))
         let arr = unbox<obj array> parts
         equal 1 arr.Length
         equal "hello" (unbox<string> arr.[0]))

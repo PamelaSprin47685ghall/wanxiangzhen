@@ -14,7 +14,7 @@ let entries () : (string * (unit -> unit)) list = [
         let d = empty "s1" "req"
         equal "s1" d.SessionId
         equal "req" d.RootRequirement
-        check d.Tasks.IsEmpty)
+        checkBare d.Tasks.IsEmpty)
 
     ("Dag.addTask + findTask", fun () ->
         let d = empty "s1" "" |> addTask (mkTask "a" [] Pending)
@@ -28,19 +28,19 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dag.isReady no deps", fun () ->
         let d = empty "s1" "" |> addTask (mkTask "a" [] Pending)
-        check (isReady (mkTask "a" [] Pending) d))
+        checkBare (isReady (mkTask "a" [] Pending) d))
 
     ("Dag.isReady dep not merged", fun () ->
         let d = empty "s1" ""
                 |> addTask (mkTask "dep" [] Pending)
                 |> addTask (mkTask "a" ["dep"] Pending)
-        check (not (isReady (findTask "a" d).Value d)))
+        checkBare (not (isReady (findTask "a" d).Value d)))
 
     ("Dag.isReady dep merged", fun () ->
         let d = empty "s1" ""
                 |> addTask (mkTask "dep" [] Merged)
                 |> addTask (mkTask "a" ["dep"] Pending)
-        check (isReady (findTask "a" d).Value d))
+        checkBare (isReady (findTask "a" d).Value d))
 
     ("Dag.readyTasks sorted", fun () ->
         let d = empty "s1" ""
@@ -59,7 +59,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dag.topologicalOrder linear", fun () ->
         let result = topologicalOrder [("c", ["b"]); ("b", ["a"]); ("a", [])]
-        check (Result.isOk result)
+        checkBare (Result.isOk result)
         let order = result |> Result.defaultValue []
         equal 3 order.Length
         equal "a" order.[0]
@@ -68,7 +68,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("Dag.topologicalOrder branching", fun () ->
         let result = topologicalOrder [("d", ["b"; "c"]); ("c", ["a"]); ("b", ["a"]); ("a", [])]
-        check (Result.isOk result))
+        checkBare (Result.isOk result))
 
     ("Dag.detectCycle none", fun () ->
         isNone (detectCycle [("a", []); ("b", ["a"]); ("c", ["b"])]))
@@ -82,24 +82,24 @@ let entries () : (string * (unit -> unit)) list = [
     ("formatDag shows sessionId", fun () ->
         let d = empty "squad-session-001" "req"
         let s = formatDag d
-        check (s.Contains "squad-session-001"))
+        checkBare (s.Contains "squad-session-001"))
 
     ("formatDag shows (no tasks) when empty", fun () ->
         let d = empty "s1" ""
         let s = formatDag d
-        check (s.Contains "(no tasks)"))
+        checkBare (s.Contains "(no tasks)"))
 
     ("formatDag shows task line with id/status for single task", fun () ->
         let d = empty "s1" "" |> addTask (mkTask "squad-a1b2" [] Pending)
         let s = formatDag d
-        check (s.Contains "squad-a1b2")
-        check (s.Contains "pending"))
+        checkBare (s.Contains "squad-a1b2")
+        checkBare (s.Contains "pending"))
 
     ("formatDag shows deps when present", fun () ->
         let d = empty "s1" ""
                 |> addTask (mkTask "squad-a1b2" ["squad-x9y8"] Pending)
         let s = formatDag d
-        check (s.Contains "squad-x9y8"))
+        checkBare (s.Contains "squad-x9y8"))
 
     ("formatSquadUpdateOutcome Success", fun () ->
         let s = formatSquadUpdateOutcome (Success)
@@ -107,7 +107,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("formatSquadUpdateOutcome DependencyErrors", fun () ->
         let s = formatSquadUpdateOutcome (DependencyErrors [("squad-a1b2", "squad-zzzz")])
-        check (s.Contains "squad-a1b2 dependsOn unknown squad-zzzz"))
+        checkBare (s.Contains "squad-a1b2 dependsOn unknown squad-zzzz"))
 
     ("formatSquadUpdateOutcome CycleDetected", fun () ->
         let s = formatSquadUpdateOutcome (CycleDetected ["squad-x"; "squad-y"; "squad-x"])
@@ -115,7 +115,7 @@ let entries () : (string * (unit -> unit)) list = [
 
     ("formatSquadUpdateOutcome IdExhausted", fun () ->
         let s = formatSquadUpdateOutcome IdExhausted
-        check (s.Contains "unique task id"))
+        checkBare (s.Contains "unique task id"))
 
     ("formatSquadUpdateOutcome InvalidInput", fun () ->
         let s = formatSquadUpdateOutcome (InvalidInput "bad input")

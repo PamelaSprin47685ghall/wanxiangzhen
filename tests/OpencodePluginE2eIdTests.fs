@@ -44,8 +44,8 @@ let testSquadUpdateGeneratesUniqueIds () : JS.Promise<unit> =
             |> List.map fst
             |> List.filter (fun id -> id.StartsWith "squad-")
 
-        check (List.length taskIds = 2)
-        check (Set.ofList taskIds |> Set.count = 2)   // distinct
+        checkBare (List.length taskIds = 2)
+        checkBare (Set.ofList taskIds |> Set.count = 2)   // distinct
      }
 
 // Test 10 — collision retry exhaustion: ShowRefExists always true → IdExhausted error
@@ -76,9 +76,9 @@ let testSquadUpdateRetriesGeneratedIdOnRefCollision () : JS.Promise<unit> =
         let! result = execFn.Invoke(updateArgs, createObj [])
         rt.Scheduling <- false
 
-        check (result.Contains "unique task id")
-        check (obs.showRefExistsCalls.Length >= 10)
-        check (rt.Dag.Tasks.IsEmpty)
+        checkBare (result.Contains "unique task id")
+        checkBare (obs.showRefExistsCalls.Length >= 10)
+        checkBare (rt.Dag.Tasks.IsEmpty)
      }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

@@ -58,13 +58,13 @@ let testSquadUpdateCancelsRunningTask () : JS.Promise<unit> =
 
         // ⑥ verify task status = Cancelled
         match rt.Dag.Tasks |> Map.tryFind "squad-cancel-01" with
-        | Some t -> check (t.Status = Cancelled)
-        | None   -> check false
+        | Some t -> checkBare (t.Status = Cancelled)
+        | None   -> checkBare false
 
         // ⑦ verify KillPid was called (non-empty)
-        check (obs.killPidCalls.Length > 0)
+        checkBare (obs.killPidCalls.Length > 0)
 
-        check (obs.squadEventLog |> List.filter (function SquadCancelled _ -> true | _ -> false) |> List.length = 1)
+        checkBare (obs.squadEventLog |> List.filter (function SquadCancelled _ -> true | _ -> false) |> List.length = 1)
     }
 
 // Test 7 — /squad-kill cancels running task, KillPid called, no worktree/branch cleanup
@@ -104,13 +104,13 @@ let testSquadKillCancelsWithoutCleanup () : JS.Promise<unit> =
         do! unbox<JS.Promise<unit>> (cmdHook $ (killInput, killOutput))
 
         // ③ assertions: Cancelled, KillPid called, no worktree/branch cleanup
-        check (obs.killPidCalls.Length > 0)
-        check (obs.worktreeRemoveCalls = [])
-        check (obs.branchDeleteCalls   = [])
+        checkBare (obs.killPidCalls.Length > 0)
+        checkBare (obs.worktreeRemoveCalls = [])
+        checkBare (obs.branchDeleteCalls   = [])
 
         match rt.Dag.Tasks |> Map.tryFind "squad-kill-01" with
-        | Some t -> check (t.Status = Cancelled)
-        | None   -> check false
+        | Some t -> checkBare (t.Status = Cancelled)
+        | None   -> checkBare false
     }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

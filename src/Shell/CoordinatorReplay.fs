@@ -21,6 +21,8 @@ let replayFromEventLog (rt: CoordinatorRuntime) : JS.Promise<unit> =
             | _ ->
                 currentDag <- foldEvent currentDag ev
 
+        let hasCommits = rt.Deps.HasCommits rt.ProjectRoot
+
         let reconciledTasks =
             currentDag.Tasks |> Map.map (fun _ t ->
                 if t.Status = Submitted || t.Status = Running then
@@ -31,7 +33,7 @@ let replayFromEventLog (rt: CoordinatorRuntime) : JS.Promise<unit> =
                         else t
                     | None ->
                         match t.BranchName with
-                        | Some b when rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
+                        | Some b when hasCommits && rt.Deps.MergeBaseIsAncestor rt.ProjectRoot rt.MasterBranch b ->
                             let sha = rt.Deps.RevParseRef rt.ProjectRoot rt.MasterBranch
                             { (withReconciledStatus t TaskStatus.Merged (rt.Deps.Now ())) with MergedSha = Some sha }
                         | _ ->

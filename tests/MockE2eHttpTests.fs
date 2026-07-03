@@ -34,20 +34,20 @@ let testHttpTransportTokenAndRegister () : JS.Promise<unit> =
                     "method", box "POST"
                     "headers", box {| Authorization = box "Bearer wrong-token" |}
                     "body", box (JSON?stringify (createObj [ "pid", box 12345 ])) ])
-            check (badResp.status = 401)
-            check (str badResp.body "result" = "unauthorized")
+            checkBare (badResp.status = 401)
+            checkBare (str badResp.body "result" = "unauthorized")
 
             let! regResp =
                 fetchJson (server.Url + "/task/squad-a1b2/register") (createObj [
                     "method", box "POST"
                     "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                     "body", box (JSON?stringify (createObj [ "pid", box 12345 ])) ])
-            check (regResp.status = 200)
-            check (str regResp.body "result" = "registered")
+            checkBare (regResp.status = 200)
+            checkBare (str regResp.body "result" = "registered")
 
             match findTask "squad-a1b2" rt.Dag with
-            | None -> check false
-            | Some t -> check (t.SlavePid = Some 12345)
+            | None -> checkBare false
+            | Some t -> checkBare (t.SlavePid = Some 12345)
         finally
             server.Close ()
     }

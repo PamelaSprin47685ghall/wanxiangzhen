@@ -16,6 +16,7 @@ open Wanxiangzhen.Shell.SerialQueue
 open Wanxiangzhen.Shell.HttpServer
 open Wanxiangzhen.Tests.Assert
 open Wanxiangzhen.Tests.TestDoubles
+open Wanxiangzhen.Tests.SpinWait
 
 let mkRunningTaskServer () =
     promise {
@@ -35,12 +36,5 @@ let mkRunningTaskServer () =
         return s, rt, server
     }
 
-let waitUntil (predicate: unit -> bool) (timeoutMs: int) : JS.Promise<unit> =
-    promise {
-        let mutable elapsed = 0
-        while not (predicate ()) && elapsed < timeoutMs do
-            do! Promise.sleep 10
-            elapsed <- elapsed + 10
-        if not (predicate ()) then
-            failwith "waitUntil timeout"
-    }
+let waitUntil (predicate: unit -> bool) (_timeoutMs: int) : JS.Promise<unit> =
+    spinUntilFail predicate 500

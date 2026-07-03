@@ -34,6 +34,8 @@
     <Compile Include="src/Shell/SlaveRuntime.fs" />
     <Compile Include="src/Plugin.fs" />
     <Compile Include="tests/Assert.fs" />
+    <Compile Include="tests/SpinWait.fs" />
+    <Compile Include="tests/ArchitectureTestsSupport.fs" />
     <Compile Include="tests/TaskTests.fs" />
     <Compile Include="tests/DagTests.fs" />
     <Compile Include="tests/EventReplayTests.fs" />
@@ -80,6 +82,11 @@
     <Compile Include="tests/OpencodePluginE2eSlaveQueryTests.fs" />
     <Compile Include="tests/OpencodePluginE2eIdTests.fs" />
     <Compile Include="tests/OpencodePluginE2eTests.fs" />
+    <Compile Include="tests/E2eHarnessContractTests.fs" />
+    <Compile Include="tests/E2eBehaviorGapTests.fs" />
+    <Compile Include="tests/E2eBehaviorCoverageTests.fs" />
+    <Compile Include="tests/E2eIntegrationTests.fs" />
+    <Compile Include="e2e/Tests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>

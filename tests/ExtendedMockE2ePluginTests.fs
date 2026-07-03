@@ -32,7 +32,7 @@ let testMultiSessionSquadCommandSavesPrevious () : JS.Promise<unit> =
         do! schedulerTick rt
 
         let session1 = rt.Dag.SessionId
-        check (session1 <> "")
+        checkBare (session1 <> "")
 
         let input  = createObj [ "command", box "squad"; "sessionID", box "squad-session-002"; "arguments", box "req2" ]
         let output = createObj [ "parts", box (System.Collections.Generic.List<obj>()) ]
@@ -43,9 +43,9 @@ let testMultiSessionSquadCommandSavesPrevious () : JS.Promise<unit> =
         rt.Scheduling <- true
         let! _    = handleSquadUpdate rt args2
 
-        check (rt.Sessions.ContainsKey session1)
+        checkBare (rt.Sessions.ContainsKey session1)
         let savedDag = rt.Sessions.[session1]
-        check (savedDag.Tasks.ContainsKey "squad-a1b2")
+        checkBare (savedDag.Tasks.ContainsKey "squad-a1b2")
     }
 
 let testDisposeHookClosesServerAndStopsPolling () : JS.Promise<unit> =
@@ -58,7 +58,7 @@ let testDisposeHookClosesServerAndStopsPolling () : JS.Promise<unit> =
         let mutable stopped = false
         let rt = { mkRuntime deps with Server = { Port = 12345; Url = "http://127.0.0.1:12345"; Close = fun () -> closed <- true } }
         let _ = startPidPolling rt
-        check (rt.PidPollHandle.IsSome)
+        checkBare (rt.PidPollHandle.IsSome)
         s.stopPollingOverride <- Some (fun h -> stopped <- true)
 
         let dispose () : JS.Promise<unit> =
@@ -69,8 +69,8 @@ let testDisposeHookClosesServerAndStopsPolling () : JS.Promise<unit> =
 
         do! dispose ()
 
-        check closed
-        check stopped
+        checkBare closed
+        checkBare stopped
     }
 
 let testRealisticOpencodePluginInputMock () : JS.Promise<unit> =
@@ -102,21 +102,21 @@ let testRealisticOpencodePluginInputMock () : JS.Promise<unit> =
         let! result = pluginWithDeps mockCtx deps
 
         let hooks = get result "hooks"
-        check (not (isNullish hooks))
-        check (not (isNullish (get hooks "tool")))
-        check (not (isNullish (get hooks "config")))
-        check (not (isNullish (get hooks "command.execute.before")))
-        check (not (isNullish (get hooks "chat.message")))
-        check (not (isNullish (get hooks "dispose")))
+        checkBare (not (isNullish hooks))
+        checkBare (not (isNullish (get hooks "tool")))
+        checkBare (not (isNullish (get hooks "config")))
+        checkBare (not (isNullish (get hooks "command.execute.before")))
+        checkBare (not (isNullish (get hooks "chat.message")))
+        checkBare (not (isNullish (get hooks "dispose")))
 
         let runtime = get result "runtime"
-        check (not (isNullish runtime))
+        checkBare (not (isNullish runtime))
 
         let tools = get hooks "tool"
-        check (not (isNullish (get tools "squad_update")))
+        checkBare (not (isNullish (get tools "squad_update")))
 
         let cfg = get hooks "config"
-        check (not (isNullish cfg))
+        checkBare (not (isNullish cfg))
     }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

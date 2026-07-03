@@ -39,7 +39,7 @@ let entries () : (string * (unit -> unit)) list = [
         equal "kitty" config.Terminal
         match config.MasterBranch with
         | Some b -> equal "main" b
-        | None -> check false
+        | None -> check "" false
         equal ["node_modules"; ".venv"] config.SharedDirs
         cleanup temp)
 

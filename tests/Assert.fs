@@ -18,6 +18,9 @@ let reset () =
     failureCount <- 0
     failureLabels <- []
 
+/// Alias for reset — used by e2e runner to clear state before each run.
+let clearFailuresForRun () = reset ()
+
 let private pass () = passCount <- passCount + 1
 
 let recordFailure () =
@@ -30,10 +33,21 @@ let recordException (msg: string) =
     failureLabels <- currentLabel :: failureLabels
     console?error ("FAIL: " + currentLabel + " -- " + msg) |> ignore
 
-let check (cond: bool) = if cond then pass () else recordFailure ()
-let equal (expected: 'a) (actual: 'a) = check (expected = actual)
-let isSome (x: 'a option) = check x.IsSome
-let isNone (x: 'a option) = check (not x.IsSome)
+let checkBare (cond: bool) = if cond then pass () else recordFailure ()
+
+/// Labeled check — records the label with the failure for diagnostics.
+let check (label: string) (cond: bool) =
+    if cond then pass ()
+    else
+        failureCount <- failureCount + 1
+        failureLabels <- label :: failureLabels
+        console?error ("FAIL: " + label) |> ignore
+
+let chk (label: string) (cond: bool) = check label cond
+
+let equal (expected: 'a) (actual: 'a) = checkBare (expected = actual)
+let isSome (x: 'a option) = checkBare x.IsSome
+let isNone (x: 'a option) = checkBare (not x.IsSome)
 
 let summary () : int =
     let total = passCount + failureCount

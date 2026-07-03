@@ -53,6 +53,8 @@ type FakeState = {
     mutable startPollingOverride   : (int -> (unit -> unit) -> obj) option
     mutable stopPollingOverride    : (obj -> unit) option
     mutable killPidOverride        : (int -> obj -> unit) option
+    mutable hasCommitsResult       : bool
+    mutable hasCommitsOverride     : (string -> bool) option
     }
 
 let mkFake () : FakeState =
@@ -100,6 +102,8 @@ let mkFake () : FakeState =
       startPollingOverride     = None
       stopPollingOverride      = None
       killPidOverride          = None
+      hasCommitsResult         = true
+      hasCommitsOverride       = None
       }
 
 let mkDeps (s: FakeState) : CoordinatorDeps =
@@ -171,7 +175,11 @@ let mkDeps (s: FakeState) : CoordinatorDeps =
             match s.stopPollingOverride with
             | Some f -> f h
             | None -> s.stopPollingCalls <- s.stopPollingCalls @ [h]
-      Now                  = fun () -> System.DateTime.UtcNow.ToString("o") }
+      Now                  = fun () -> System.DateTime.UtcNow.ToString("o")
+      HasCommits           = fun c ->
+            match s.hasCommitsOverride with
+            | Some f -> f c
+            | None -> s.hasCommitsResult }
 
 let mkRuntime (deps: CoordinatorDeps) : CoordinatorRuntime =
     { Dag          = empty "squad-session-001" ""

@@ -37,27 +37,27 @@ let testMaxConcurrentLimitsReadyTasks () : JS.Promise<unit> =
 
         let running = rt.Dag.Tasks |> Map.toList |> List.map snd |> List.filter (fun t -> t.Status = Running)
         let pending = rt.Dag.Tasks |> Map.toList |> List.map snd |> List.filter (fun t -> t.Status = Pending)
-        check (running.Length = 2)
-        check (pending.Length = 3)
+        checkBare (running.Length = 2)
+        checkBare (pending.Length = 3)
 
         match running |> List.tryHead with
-        | None -> check false
+        | None -> checkBare false
         | Some firstTask ->
             let! _ = routeHandler rt "POST" (sprintf "/task/%s/register" firstTask.Id) (createObj [ "pid", box 111 ])
             s.revParseRefOverrides <- s.revParseRefOverrides.Add(firstTask.Id, "deadbeef")
             let! _ = routeHandler rt "POST" (sprintf "/task/%s/submit" firstTask.Id) (createObj [ "commitSha", box "deadbeef" ])
 
             match findTask firstTask.Id rt.Dag with
-            | Some t -> check (t.Status = Merged)
-            | None -> check false
+            | Some t -> checkBare (t.Status = Merged)
+            | None -> checkBare false
 
             rt.Scheduling <- false
             do! schedulerTick rt
 
             let running2 = rt.Dag.Tasks |> Map.toList |> List.map snd |> List.filter (fun t -> t.Status = Running)
             let pending2 = rt.Dag.Tasks |> Map.toList |> List.map snd |> List.filter (fun t -> t.Status = Pending)
-            check (running2.Length = 2)
-            check (pending2.Length = 2)
+            checkBare (running2.Length = 2)
+            checkBare (pending2.Length = 2)
     }
 
 let testDependencyChainSchedulesSequentially () : JS.Promise<unit> =
@@ -80,45 +80,45 @@ let testDependencyChainSchedulesSequentially () : JS.Promise<unit> =
         do! schedulerTick rt
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some a -> check (a.Status = Running)
+        | None -> checkBare false
+        | Some a -> checkBare (a.Status = Running)
         match findTask "squad-c3d4" rt.Dag with
-        | None -> check false
-        | Some b -> check (b.Status = Pending)
+        | None -> checkBare false
+        | Some b -> checkBare (b.Status = Pending)
         match findTask "squad-e5f6" rt.Dag with
-        | None -> check false
-        | Some c -> check (c.Status = Pending)
+        | None -> checkBare false
+        | Some c -> checkBare (c.Status = Pending)
 
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-a1b2", "deadbeef")
         let! _ = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
 
         match findTask "squad-a1b2" rt.Dag with
-        | Some a -> check (a.Status = Merged)
-        | None -> check false
+        | Some a -> checkBare (a.Status = Merged)
+        | None -> checkBare false
 
         rt.Scheduling <- false
         do! schedulerTick rt
 
         match findTask "squad-c3d4" rt.Dag with
-        | None -> check false
-        | Some b -> check (b.Status = Running)
+        | None -> checkBare false
+        | Some b -> checkBare (b.Status = Running)
         match findTask "squad-e5f6" rt.Dag with
-        | None -> check false
-        | Some c -> check (c.Status = Pending)
+        | None -> checkBare false
+        | Some c -> checkBare (c.Status = Pending)
 
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-c3d4", "deadbeef")
         let! _ = routeHandler rt "POST" "/task/squad-c3d4/submit" (createObj [ "commitSha", box "deadbeef" ])
 
         match findTask "squad-c3d4" rt.Dag with
-        | Some b -> check (b.Status = Merged)
-        | None -> check false
+        | Some b -> checkBare (b.Status = Merged)
+        | None -> checkBare false
 
         rt.Scheduling <- false
         do! schedulerTick rt
 
         match findTask "squad-e5f6" rt.Dag with
-        | None -> check false
-        | Some c -> check (c.Status = Running)
+        | None -> checkBare false
+        | Some c -> checkBare (c.Status = Running)
     }
 
 let testDoneBeaconMarksTaskDone () : JS.Promise<unit> =
@@ -138,15 +138,15 @@ let testDoneBeaconMarksTaskDone () : JS.Promise<unit> =
         let! _ = routeHandler rt "POST" "/task/squad-a1b2/register" (createObj [ "pid", box 12345 ])
 
         let! resp = routeHandler rt "POST" "/task/squad-a1b2/done" (createObj [])
-        check (resp.StatusCode = 200)
-        check ((str resp.Body "result") = "acknowledged")
+        checkBare (resp.StatusCode = 200)
+        checkBare ((str resp.Body "result") = "acknowledged")
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Done)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Done)
 
-        check (s.tryWorktreeRemoveForceCalls <> [])
-        check (s.tryBranchDeleteForceCalls <> [])
+        checkBare (s.tryWorktreeRemoveForceCalls <> [])
+        checkBare (s.tryBranchDeleteForceCalls <> [])
     }
 
 let testPidPollingDetectsSlaveDeath () : JS.Promise<unit> =
@@ -168,13 +168,13 @@ let testPidPollingDetectsSlaveDeath () : JS.Promise<unit> =
         s.startPollingOverride <- Some (fun ms f -> capturedCheck <- Some f; box "poll-handle")
 
         let _ = startPidPolling rt
-        check (capturedCheck.IsSome)
+        checkBare (capturedCheck.IsSome)
 
         s.isPidAliveResult <- false
 
         match capturedCheck with
-        | None -> check false
-        | Some checkFn -> checkFn ()
+            | None -> checkBare false
+            | Some checkFn -> checkFn ()
 
         do! waitUntil (fun () ->
             match findTask "squad-a1b2" rt.Dag with
@@ -182,8 +182,8 @@ let testPidPollingDetectsSlaveDeath () : JS.Promise<unit> =
             | None -> false) 2000
 
         match findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Done)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Done)
     }
 
 let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [

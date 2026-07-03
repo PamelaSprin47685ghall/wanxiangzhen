@@ -23,28 +23,28 @@ let private getEnv () : obj = get nodeProcess "env"
 let entries () : (string * (unit -> unit)) list = [
     ("SlaveRuntime.slaveToolDefs has submit_to_squad", fun () ->
         let defs = slaveToolDefs testConfig
-        check (has defs "submit_to_squad"))
+        checkBare (has defs "submit_to_squad"))
 
     ("SlaveRuntime.slaveToolDefs has query_squad", fun () ->
         let defs = slaveToolDefs testConfig
-        check (has defs "query_squad"))
+        checkBare (has defs "query_squad"))
 
     ("SlaveRuntime.slaveToolDefs submit description non-empty", fun () ->
         let defs = slaveToolDefs testConfig
         let submitDef = get defs "submit_to_squad"
         let desc = str submitDef "description"
-        check (desc.Length > 0))
+        checkBare (desc.Length > 0))
 
     ("SlaveRuntime.slaveToolDefs query description non-empty", fun () ->
         let defs = slaveToolDefs testConfig
         let queryDef = get defs "query_squad"
         let desc = str queryDef "description"
-        check (desc.Length > 0))
+        checkBare (desc.Length > 0))
 
     ("SlaveRuntime.slaveToolDefs query has args schema", fun () ->
         let defs = slaveToolDefs testConfig
         let queryDef = get defs "query_squad"
-        check (not (isNullish (get queryDef "args"))))
+        checkBare (not (isNullish (get queryDef "args"))))
 
     ("readSlaveConfig without env returns None", fun () ->
         let env = getEnv ()
@@ -75,7 +75,7 @@ let entries () : (string * (unit -> unit)) list = [
             equal "/tmp/wt" cfg.WorktreePath
             equal "main" cfg.MasterBranch
             equal "tok" cfg.Token
-        | None -> check false
+        | None -> checkBare false
         // restore
         setKey env "SQUAD_COORDINATOR_URL" (box origUrl)
         setKey env "SQUAD_TASK_ID" (box origTid)
@@ -94,7 +94,7 @@ let entriesAsync () : (string * (unit -> JS.Promise<unit>)) list = [
             let cfg = { testConfig with WorktreePath = "/nonexistent/worktree/path" }
             let! outcome = submitToSquad cfg
             match outcome with
-            | LocalGitError _ -> check true
-            | _               -> check false
+            | LocalGitError _ -> checkBare true
+            | _               -> checkBare false
         })
 ]

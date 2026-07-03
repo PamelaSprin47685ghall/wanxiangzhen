@@ -28,60 +28,60 @@ let testHappyPath () : JS.Promise<unit> =
         do! handleCommandExecuteBefore rt input output
 
         let parts = get output "parts" :?> System.Collections.Generic.List<obj>
-        check (parts.Count = 1)
-        check ((str parts.[0] "text").Contains "squad_event: squad_created")
+        checkBare (parts.Count = 1)
+        checkBare ((str parts.[0] "text").Contains "squad_event: squad_created")
 
         // ② handleSquadUpdate → task Pending ( Scheduling=true suppresses fire-and-forget tick )
         rt.Scheduling <- true
         let evts  = [| TestDoubles.mkTaskEvent "squad-a1b2" "add remember-me" "add remember-me to login" [] |]
         let args  = TestDoubles.mkSquadUpdateArgs evts
         let! reply = handleSquadUpdate rt args
-        check (reply.Contains "created")
-        check (reply.Contains "1")
+        checkBare (reply.Contains "created")
+        checkBare (reply.Contains "1")
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Pending)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Pending)
 
         // ③ schedulerTick → task Running + worktree add + spawnSlave
         rt.Scheduling <- false
         do! schedulerTick rt
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
+        | None -> checkBare false
         | Some t ->
-            check (t.Status = Running)
-            check (t.WorktreePath.IsSome)
-            check (t.BranchName.IsSome)
+            checkBare (t.Status = Running)
+            checkBare (t.WorktreePath.IsSome)
+            checkBare (t.BranchName.IsSome)
 
-        check (List.contains "tryWorktreeAdd" s.log.Value)
-        check (List.exists (fun (x: string) -> x.StartsWith "spawnSlave") s.log.Value)
+        checkBare (List.contains "tryWorktreeAdd" s.log.Value)
+        checkBare (List.exists (fun (x: string) -> x.StartsWith "spawnSlave") s.log.Value)
 
         // ④ POST /register → slavePid
         let! regResp = routeHandler rt "POST" "/task/squad-a1b2/register" (createObj [ "pid", box 12345 ])
-        check (regResp.StatusCode = 200)
-        check ((str regResp.Body "result") = "registered")
+        checkBare (regResp.StatusCode = 200)
+        checkBare ((str regResp.Body "result") = "registered")
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.SlavePid = Some 12345)
+        | None -> checkBare false
+        | Some t -> checkBare (t.SlavePid = Some 12345)
 
         // ⑤ POST /submit → merged + cleanup
         // stale-commit guard: branch HEAD SHA must equal reported commitSha;
         // set per-branch override so RevParseRef("squad-a1b2") returns "deadbeef"
         s.revParseRefOverrides <- s.revParseRefOverrides.Add("squad-a1b2", "deadbeef")
         let! subResp = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
-        check (subResp.StatusCode = 200)
-        check ((str subResp.Body "result") = "merged")
+        checkBare (subResp.StatusCode = 200)
+        checkBare ((str subResp.Body "result") = "merged")
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
+        | None -> checkBare false
         | Some t ->
-            check (t.Status = Merged)
-            check (t.MergedSha.IsSome)
+            checkBare (t.Status = Merged)
+            checkBare (t.MergedSha.IsSome)
 
-        check (List.contains "tryWorktreeRemoveForce" s.log.Value)
-        check (List.contains "tryBranchDeleteForce" s.log.Value)
+        checkBare (List.contains "tryWorktreeRemoveForce" s.log.Value)
+        checkBare (List.contains "tryBranchDeleteForce" s.log.Value)
 
         return ()
     }
@@ -110,9 +110,9 @@ let testCompetingSubmitReturnsRebaseNeeded () : JS.Promise<unit> =
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag, TestDoubles.findTask "squad-c3d4" rt.Dag with
         | Some a, Some b ->
-            check (a.Status = Running)
-            check (b.Status = Running)
-        | _ -> check false
+            checkBare (a.Status = Running)
+            checkBare (b.Status = Running)
+        | _ -> checkBare false
 
         // register both slaves
         let! _ = routeHandler rt "POST" "/task/squad-a1b2/register" (createObj [ "pid", box 111 ])
@@ -120,25 +120,25 @@ let testCompetingSubmitReturnsRebaseNeeded () : JS.Promise<unit> =
 
         // Task A submit → merged (stale-commit guard uses default revParseRefResult="deadbeef")
         let! respA = routeHandler rt "POST" "/task/squad-a1b2/submit" (createObj [ "commitSha", box "deadbeef" ])
-        check (respA.StatusCode = 200)
-        check ((str respA.Body "result") = "merged")
+        checkBare (respA.StatusCode = 200)
+        checkBare ((str respA.Body "result") = "merged")
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | Some a -> check (a.Status = Merged)
-        | None   -> check false
+        | Some a -> checkBare (a.Status = Merged)
+        | None   -> checkBare false
 
-        check (s.mergeFfOnlyCalled = true)
+        checkBare (s.mergeFfOnlyCalled = true)
 
         // Task B submit → rebase_needed (stale-commit guard uses default revParseRefResult="deadbeef")
         rt.Scheduling <- false   // reset before second explicit tick
         let! respB = routeHandler rt "POST" "/task/squad-c3d4/submit" (createObj [ "commitSha", box "deadbeef" ])
-        check (respB.StatusCode = 200)
-        check ((str respB.Body "result") = "rebase_needed")
+        checkBare (respB.StatusCode = 200)
+        checkBare ((str respB.Body "result") = "rebase_needed")
 
         // B falls back to Running
         match TestDoubles.findTask "squad-c3d4" rt.Dag with
-        | Some b -> check (b.Status = Running)
-        | None   -> check false
+        | Some b -> checkBare (b.Status = Running)
+        | None   -> checkBare false
 
         return ()
     }
@@ -159,8 +159,8 @@ let testCycleRejected () : JS.Promise<unit> =
         let args = TestDoubles.mkSquadUpdateArgs evts
         rt.Scheduling <- false
         let! result = handleSquadUpdate rt args
-        check (result.Contains "cycle")
-        check (rt.Dag.Tasks.IsEmpty)
+        checkBare (result.Contains "cycle")
+        checkBare (rt.Dag.Tasks.IsEmpty)
         return ()
     }
 
@@ -178,8 +178,8 @@ let testDanglingDepsRejected () : JS.Promise<unit> =
         let args = TestDoubles.mkSquadUpdateArgs evts
         rt.Scheduling <- false
         let! result = handleSquadUpdate rt args
-        check (result.Contains "squad-zzzz")
-        check (rt.Dag.Tasks.IsEmpty)
+        checkBare (result.Contains "squad-zzzz")
+        checkBare (rt.Dag.Tasks.IsEmpty)
         return ()
     }
 
@@ -204,9 +204,9 @@ let testSquadStatusCommand () : JS.Promise<unit> =
         do! handleCommandExecuteBefore rt input output
 
         let parts = get output "parts" :?> System.Collections.Generic.List<obj>
-        check (parts.Count = 1)
+        checkBare (parts.Count = 1)
         let statusText = str parts.[0] "text"
-        check (statusText.Contains "squad-a1b2")
+        checkBare (statusText.Contains "squad-a1b2")
         return ()
     }
 
@@ -232,11 +232,11 @@ let testSquadKillCommand () : JS.Promise<unit> =
         do! schedulerTick rt
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
+        | None -> checkBare false
         | Some t ->
-            check (t.Status = Running)
-            check (t.WorktreePath.IsSome)
-            check (t.BranchName.IsSome)
+            checkBare (t.Status = Running)
+            checkBare (t.WorktreePath.IsSome)
+            checkBare (t.BranchName.IsSome)
 
         // ③ register pid
         let pid = 98765
@@ -248,14 +248,14 @@ let testSquadKillCommand () : JS.Promise<unit> =
         do! handleCommandExecuteBefore rt input output
 
         // ⑤ assertions
-        check s.killPidCalled
-        check (s.killPidPid = Some pid)
-        check (s.tryWorktreeRemoveForceCalls = [])
-        check (s.tryBranchDeleteForceCalls = [])
+        checkBare s.killPidCalled
+        checkBare (s.killPidPid = Some pid)
+        checkBare (s.tryWorktreeRemoveForceCalls = [])
+        checkBare (s.tryBranchDeleteForceCalls = [])
 
         match TestDoubles.findTask "squad-a1b2" rt.Dag with
-        | None -> check false
-        | Some t -> check (t.Status = Cancelled)
+        | None -> checkBare false
+        | Some t -> checkBare (t.Status = Cancelled)
         return ()
     }
 

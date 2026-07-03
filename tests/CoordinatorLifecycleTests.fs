@@ -26,8 +26,8 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
         promise {
             let rt = mkRuntime ()
             let! result = handleSquadUpdate rt (box null)
-            check (result.Contains "Error")
-            check (result.Contains "events")
+            checkBare (result.Contains "Error")
+            checkBare (result.Contains "events")
         })
 
     ("handleSquadUpdate non-array events returns Error", fun () ->
@@ -35,51 +35,80 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             let rt = mkRuntime ()
             let args = createObj [ "events", box "not-an-array" ]
             let! result = handleSquadUpdate rt args
-            check (result.Contains "Error")
+            checkBare (result.Contains "Error")
+        })
+
+    ("handleSquadUpdate JSON string events are parsed and accepted", fun () ->
+        promise {
+            let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
+            let json =
+                "[{\"type\":\"tasks_created\",\"tasks\":[" +
+                "{\"taskId\":\"squad-a1b2\",\"title\":\"Task A\",\"description\":\"Desc A\",\"dependsOn\":[]}" +
+                "]}]"
+            let args = createObj [ "events", box json ]
+            let! result = handleSquadUpdate rt args
+            checkBare (result.Contains "created")
+            checkBare (rt.Dag.Tasks.ContainsKey "squad-a1b2")
+        })
+
+    ("handleSquadUpdate rejects tasks when session id is empty", fun () ->
+        promise {
+            let rt = mkRuntime ()
+            let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "Desc A" [] ] |]
+            let args = createObj [ "events", box events ]
+            let! result = handleSquadUpdate rt args
+            checkBare (result.Contains "Error")
+            checkBare (result.Contains "session")
+            checkBare (rt.Dag.Tasks.IsEmpty)
         })
 
     ("handleSquadUpdate empty title rejected — DAG unchanged", fun () ->
         promise {
             let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "" "Desc A" [] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (result.Contains "Error")
-            check (result.Contains "non-empty")
-            check (rt.Dag.Tasks.IsEmpty)
+            checkBare (result.Contains "Error")
+            checkBare (result.Contains "non-empty")
+            checkBare (rt.Dag.Tasks.IsEmpty)
         })
 
     ("handleSquadUpdate empty description rejected — DAG unchanged", fun () ->
         promise {
             let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "" [] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (result.Contains "Error")
-            check (result.Contains "non-empty")
-            check (rt.Dag.Tasks.IsEmpty)
+            checkBare (result.Contains "Error")
+            checkBare (result.Contains "non-empty")
+            checkBare (rt.Dag.Tasks.IsEmpty)
         })
 
     ("handleSquadUpdate dangling deps returns dependency error", fun () ->
         promise {
             let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| mkTasksCreated [ mkTask "squad-a1b2" "Task A" "Desc A" ["squad-zzzz"] ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (result.Contains "squad-a1b2")
-            check (result.Contains "squad-zzzz")
+            checkBare (result.Contains "squad-a1b2")
+            checkBare (result.Contains "squad-zzzz")
         })
 
     ("handleSquadUpdate cycle returns cycle detected", fun () ->
         promise {
             let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| mkTasksCreated [
                 mkTask "squad-a1b2" "Task A" "desc A" ["squad-c3d4"]
                 mkTask "squad-c3d4" "Task B" "desc B" ["squad-a1b2"]
             ] |]
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
-            check (result.Contains "cycle")
+            checkBare (result.Contains "cycle")
         })
 
     ("handleSquadUpdate success returns confirmation text and injects events", fun () ->
@@ -100,22 +129,22 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             let args = createObj [ "events", box events ]
             let! result = handleSquadUpdate rt args
             // result is short confirmation text, NOT YAML frontmatter
-            check (not (result.StartsWith "---"))
-            check (result.Contains "created")
-            check (result.Contains "2")
+            checkBare (not (result.StartsWith "---"))
+            checkBare (result.Contains "created")
+            checkBare (result.Contains "2")
             // events were injected into the master session via PromptSession
-            check (promptCalls.Count >= 1)
+            checkBare (promptCalls.Count >= 1)
             let (_, injectedSid, injectedMsg) = promptCalls.[0]
-            check (injectedSid = "squad-session-001")
-            check (injectedMsg.Contains "squad_event: tasks_created")
-            check (injectedMsg.Contains "squad-a1b2")
+            checkBare (injectedSid = "squad-session-001")
+            checkBare (injectedMsg.Contains "squad_event: tasks_created")
+            checkBare (injectedMsg.Contains "squad-a1b2")
         })
 
     ("mkRuntime produces independent GitQueue and InjectQueue", fun () ->
         promise {
             let rt = mkRuntime ()
             let same = obj.ReferenceEquals(box rt.GitQueue, box rt.InjectQueue)
-            check (not same)
+            checkBare (not same)
         })
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -126,15 +155,16 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
     ("handleSquadUpdate cancel-only returns squad_cancelled not tasks_created", fun () ->
         promise {
             let rt = mkRuntime ()
+            rt.Dag <- { rt.Dag with SessionId = "squad-session-001" }
             let events = box [| createObj [
                 "type", box "squad_cancelled"
             ] |]
             let args = createObj [ "events", box events ]
             rt.MasterSessionId <- "squad-session-001"
             let! result = handleSquadUpdate rt args
-            check (result.Contains "cancelled")
-            check (not (result.Contains "tasks_created"))
-            check (not (result.StartsWith "---"))
+            checkBare (result.Contains "cancelled")
+            checkBare (not (result.Contains "tasks_created"))
+            checkBare (not (result.StartsWith "---"))
         })
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -162,9 +192,9 @@ let entries () : (string * (unit -> JS.Promise<unit>)) list = [
             rt.GitError       <- None
             do! replayFromEventLog rt
             match findTask "squad-a1b2" rt.Dag with
-            | None -> check false
+            | None -> checkBare false
             | Some t ->
-                check (t.Status = Merged)
-                check (t.MergedSha = Some "merged-sha")
+                checkBare (t.Status = Merged)
+                checkBare (t.MergedSha = Some "merged-sha")
         })
 ]

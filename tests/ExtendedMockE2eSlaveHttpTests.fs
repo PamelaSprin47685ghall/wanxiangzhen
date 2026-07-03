@@ -24,8 +24,8 @@ let testSlaveSubmitMerged () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 200)
-            check (str r.body "result" = "merged")
+            checkBare (r.status = 200)
+            checkBare (str r.body "result" = "merged")
         finally
             server.Close ()
     }
@@ -40,8 +40,8 @@ let testSlaveSubmitRebaseNeeded () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 200)
-            check (str r.body "result" = "rebase_needed")
+            checkBare (r.status = 200)
+            checkBare (str r.body "result" = "rebase_needed")
         finally
             server.Close ()
     }
@@ -55,8 +55,8 @@ let testSlaveSubmitStaleCommit () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 200)
-            check (str r.body "result" = "stale_commit")
+            checkBare (r.status = 200)
+            checkBare (str r.body "result" = "stale_commit")
         finally
             server.Close ()
     }
@@ -74,8 +74,8 @@ let testSlaveSubmitCoordinatorNotReady () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 200)
-            check (str r.body "result" = "coordinator_not_ready")
+            checkBare (r.status = 200)
+            checkBare (str r.body "result" = "coordinator_not_ready")
         finally
             server.Close ()
     }
@@ -91,8 +91,8 @@ let testSlaveSubmitNotSubmittable () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 200)
-            check (str r.body "result" = "not_submittable")
+            checkBare (r.status = 200)
+            checkBare (str r.body "result" = "not_submittable")
         finally
             server.Close ()
     }
@@ -105,8 +105,8 @@ let testSlaveSubmitTaskNotFound () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 404)
-            check (str r.body "result" = "task_not_found")
+            checkBare (r.status = 404)
+            checkBare (str r.body "result" = "task_not_found")
         finally
             server.Close ()
     }
@@ -119,8 +119,8 @@ let testSlaveSubmitUnauthorized () : JS.Promise<unit> =
                 "method", box "POST"
                 "headers", box {| Authorization = box "Bearer wrong-token" |}
                 "body", box (JSON?stringify (createObj [ "commitSha", box "deadbeef" ])) ])
-            check (r.status = 401)
-            check (str r.body "result" = "unauthorized")
+            checkBare (r.status = 401)
+            checkBare (str r.body "result" = "unauthorized")
         finally
             server.Close ()
     }
@@ -145,10 +145,10 @@ let testSlaveQuerySquadTaskDetail () : JS.Promise<unit> =
             let! resp = fetchJson (server.Url + "/task/squad-a1b2") (createObj [
                 "method", box "GET"
                 "headers", box {| Authorization = box ("Bearer " + rt.Token) |} ])
-            check (resp.status = 200)
-            check ((str resp.body "id") = "squad-a1b2")
-            check ((str resp.body "title") = "Task A")
-            check ((str resp.body "status") = "running")
+            checkBare (resp.status = 200)
+            checkBare ((str resp.body "id") = "squad-a1b2")
+            checkBare ((str resp.body "title") = "Task A")
+            checkBare ((str resp.body "status") = "running")
         finally
             server.Close ()
     }

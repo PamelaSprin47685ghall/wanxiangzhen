@@ -13,30 +13,30 @@ let entries () : (string * (unit -> unit)) list = [
         isNone (statusFromString "bogus"))
 
     ("Task.isTerminal", fun () ->
-        check (not (isTerminal Pending))
-        check (not (isTerminal Running))
-        check (not (isTerminal Submitted))
-        check (isTerminal Merged)
-        check (isTerminal Done)
-        check (isTerminal Cancelled))
+        checkBare (not (isTerminal Pending))
+        checkBare (not (isTerminal Running))
+        checkBare (not (isTerminal Submitted))
+        checkBare (isTerminal Merged)
+        checkBare (isTerminal Done)
+        checkBare (isTerminal Cancelled))
 
     ("Task.canTransition valid", fun () ->
-        check (canTransition Pending Running)
-        check (canTransition Pending Cancelled)
-        check (canTransition Running Submitted)
-        check (canTransition Running Done)
-        check (canTransition Running Cancelled)
-        check (canTransition Submitted Merged)
-        check (canTransition Submitted Running)
-        check (canTransition Submitted Done)
-        check (canTransition Submitted Cancelled))
+        checkBare (canTransition Pending Running)
+        checkBare (canTransition Pending Cancelled)
+        checkBare (canTransition Running Submitted)
+        checkBare (canTransition Running Done)
+        checkBare (canTransition Running Cancelled)
+        checkBare (canTransition Submitted Merged)
+        checkBare (canTransition Submitted Running)
+        checkBare (canTransition Submitted Done)
+        checkBare (canTransition Submitted Cancelled))
 
     ("Task.canTransition invalid", fun () ->
-        check (not (canTransition Merged Running))
-        check (not (canTransition Done Pending))
-        check (not (canTransition Cancelled Running))
-        check (not (canTransition Pending Merged))
-        check (not (canTransition Running Pending)))
+        checkBare (not (canTransition Merged Running))
+        checkBare (not (canTransition Done Pending))
+        checkBare (not (canTransition Cancelled Running))
+        checkBare (not (canTransition Pending Merged))
+        checkBare (not (canTransition Running Pending)))
 
     ("Task.create", fun () ->
         let t = create "squad-a1b2" "title" "desc" ["squad-x"] "2024-01-01"
@@ -60,13 +60,13 @@ let entries () : (string * (unit -> unit)) list = [
         let t = create "t1" "t" "d" [] "now"
         match tryWithStatus t Running "later" with
         | Ok t2 -> equal Running t2.Status; equal "later" t2.UpdatedAt
-        | Error _ -> check false)
+        | Error _ -> checkBare false)
 
     ("Task.tryWithStatus error on invalid", fun () ->
         let t = { (create "t1" "t" "d" [] "now") with Status = Merged }
         match tryWithStatus t Running "later" with
-        | Ok _ -> check false
-        | Error msg -> check (msg.Length > 0))
+        | Ok _ -> checkBare false
+        | Error msg -> checkBare (msg.Length > 0))
 
     ("Task.withReconciledStatus overrides state machine", fun () ->
         let t = { (create "t1" "t" "d" [] "now") with Status = Running }
@@ -85,7 +85,7 @@ let entries () : (string * (unit -> unit)) list = [
         let t = create "t1" "t" "d" [] "now"
         try 
             withStatus t Merged "later" |> ignore
-            check false
+            checkBare false
         with _ -> 
-            check true)
+            checkBare true)
 ]

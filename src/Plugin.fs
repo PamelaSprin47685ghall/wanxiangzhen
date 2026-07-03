@@ -28,9 +28,24 @@ open Wanxiangzhen.Shell.SymlinkShell
 [<Global("process")>]
 let private nodeProcess : obj = jsNative
 
+[<Global>]
+let private JSON : obj = jsNative
+
+[<Import("writeFileSync", "node:fs")>]
+let private writeFileSync (path: string) (data: string) : unit = jsNative
+
+[<Import("join", "node:path")>]
+let private pathJoin (path: string) (seg: string) : string = jsNative
+
 let private envVar (key: string) : string =
     let e = nodeProcess?("env")
     if isNullish e then "" else str e key
+
+let private writeE2eMetaIfEnabled (rt: CoordinatorRuntime) : unit =
+    if envVar "WANXIANGZHEN_E2E" = "1" || envVar "WANXIANGZHEN_E2E_INPROCESS" = "1" then
+        let meta = {| coordinatorUrl = rt.CoordinatorUrl; token = rt.Token; masterSessionId = rt.MasterSessionId; sessionId = rt.Dag.SessionId |}
+        let fullPath = pathJoin rt.ProjectRoot ".wanxiangzhen-e2e-meta.json"
+        writeFileSync fullPath (string (JSON?stringify(meta)))
 
 let private twoArgHook (f: obj -> obj -> JS.Promise<unit>) =
     box (System.Func<obj, obj, JS.Promise<unit>>(f))
@@ -61,8 +76,10 @@ let internal handleCommandExecuteBefore (rt: CoordinatorRuntime) (input: obj) (o
             let evt = SquadCreated (newSid, requirement)
             let! cr = commitEvent rt evt
             match cr with
-            | Error _ -> ()
-            | Ok () -> rt.Dag <- empty newSid requirement
+            | Error err -> rt.InjectError <- Some (sprintf "SquadCreated append failed: %s" err)
+            | Ok () ->
+                rt.Dag <- empty newSid requirement
+                writeE2eMetaIfEnabled rt
             let part = box {| ``type`` = "text"; text = encodeEvent evt |}
             mutateOutputParts output part
         | "squad-kill" ->
@@ -140,7 +157,7 @@ let internal assembleCoordinatorHooks (rt: CoordinatorRuntime) : obj =
         }))
     result
 
-let internal pluginWithDeps (ctx: obj) (deps: CoordinatorDeps) : JS.Promise<{| hooks: obj; runtime: CoordinatorRuntime |}> =
+let pluginWithDeps (ctx: obj) (deps: CoordinatorDeps) : JS.Promise<{| hooks: obj; runtime: CoordinatorRuntime |}> =
     promise {
         let client = get ctx "client"
         let directory = str ctx "directory"
@@ -150,7 +167,9 @@ let internal pluginWithDeps (ctx: obj) (deps: CoordinatorDeps) : JS.Promise<{| h
             | Some b -> b, None
             | None ->
                 try
-                    if deps.IsDetached directory then
+                    if not (deps.HasCommits directory) then
+                        "master", Some "Repository has no commits. Run 'git commit --allow-empty -m \"Initial commit\"' before using /squad."
+                    elif deps.IsDetached directory then
                         "master", Some "Detached HEAD detected. Please configure squad.masterBranch in AGENTS.md frontmatter."
                     else
                         deps.RevParseBranch directory, None
@@ -177,6 +196,7 @@ let private realCoordinatorDeps () : CoordinatorDeps =
         StatusIsClean        = fun _ -> true
         MergeBaseIsAncestor  = fun _ _ _ -> false
         MergeFfOnly          = fun _ _ -> ""
+        HasCommits           = fun _ -> false
         CreateSymlinks       = fun _ _ _ -> ()
         SpawnSlave           = fun _ _ _ _ -> ()
         IsPidAlive           = fun _ -> false
@@ -200,6 +220,7 @@ let private realCoordinatorDeps () : CoordinatorDeps =
         StatusIsClean        = statusIsClean
         MergeBaseIsAncestor  = mergeBaseIsAncestor
         MergeFfOnly          = mergeFfOnly
+        HasCommits           = hasCommits
         CreateSymlinks        = createSymlinks
         SpawnSlave            = spawnSlave
         IsPidAlive           = isPidAlive

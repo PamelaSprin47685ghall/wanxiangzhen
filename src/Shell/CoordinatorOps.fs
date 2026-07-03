@@ -49,6 +49,10 @@ let private startTask (rt: CoordinatorRuntime) (taskId: string) : JS.Promise<uni
         match findTask taskId rt.Dag with
         | None -> return ()
         | Some task ->
+            if not (rt.Deps.HasCommits rt.ProjectRoot) then
+                let errorMessage = "Repository has no commits. Run 'git commit --allow-empty -m \"Initial commit\"' before using /squad."
+                let! _ = commitEvent rt (TaskError (rt.Dag.SessionId, taskId, errorMessage))
+                return ()
             let parent =
                 let lastSlash = rt.ProjectRoot.LastIndexOf '/'
                 rt.ProjectRoot.Substring(0, lastSlash + 1)
