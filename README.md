@@ -16,7 +16,7 @@ pnpm add -g wanxiangshu
 pnpm add -g wanxiangzhen
 ```
 
-安装顺序不可颠倒。万象阵 不保留"没有万象术也能半残运行"的降级主路径。若缺少依赖，插件尽早失败，不静默吞错。
+安装顺序不可颠倒。万象阵 不保留"没有万象术也能半残运行"的降级主路径。若缺少依赖，slave prompt 固定按 /loop 可用构造，运行时 万象术 不存在则 /loop 命令不可用，slave 无法完成 review 流程。
 
 `wanxiangshu` 提供 `/loop`（With-Review Mode）——万象阵 不自实现 review，依赖它完成开发后的审查环节。
 
@@ -24,8 +24,8 @@ pnpm add -g wanxiangzhen
 
 | 角色 | 说明 |
 |------|------|
-| **Coordinator** | 用户的 opencode 进程。加载万象阵插件后自起本地 HTTP server，负责 DAG 拆解、调度、ff 合并、worktree 与 slave 生命周期。 |
-| **Slave** | coordinator 经 `child_process` 起的独立 opencode 进程（`opencode tui --prompt`），在隔离 worktree 工作。状态查询与提交经 HTTP 短连接发给 coordinator。 |
+| **Coordinator** | 用户的 opencode 进程。加载万象阵插件后自起本地 HTTP server，负责 DAG 拆解、调度、ff 合并、worktree 与 slave 生命周期。注册 `/squad`、`/squad-kill`、`/squad-status` 命令与 `squad_update` 工具。 |
+| **Slave** | coordinator 经 `child_process` 起的独立 opencode 进程（`opencode tui --prompt`），在隔离 worktree 工作。状态查询与提交经 HTTP 短连接发给 coordinator。注册 `submit_to_squad`、`query_squad` 工具。 |
 | **`.wanxiangzhen.ndjson`** | **SSOT**（项目根 NDJSON 事件流，每行含 `session`）。意图不落盘，事实 append；内存 DAG 为 fold 投影。启动重放事件文件；文件锁保证串行追加。详见 `PRD/EventSourcing.md`。 |
 | **git refs** | 合并事实的第二真理源。`task_merged` 落在 refs；重放后对 `running`/`submitted` 可 `git merge-base --is-ancestor` 校正。 |
 
@@ -36,7 +36,7 @@ pnpm add -g wanxiangzhen
     → coordinator LLM 拆解为 DAG（squad_update）
     → Scheduler.tick() 拓扑就绪判定
     → 对就绪 task：创建 worktree → 启动 slave（opencode tui --prompt）
-    → slave 开发（可选 /loop review）→ commit → submit_to_squad
+    → slave 开发 → /loop review → commit → submit_to_squad
     → coordinator ff-only 检查
         → merged：推进主分支，清理 worktree，触发后续 task
         → rebase_needed：slave rebase 主分支，重新 review + submit（无限重试）
@@ -55,7 +55,7 @@ pnpm add -g wanxiangzhen
 ---
 squad:
   maxConcurrent: 3          # 同时运行 slave 上限，默认 3
-  terminal: alacritty       # 终端模拟器，默认按平台探测
+  terminal: alacritty       # 终端模拟器，默认 alacritty
   masterBranch: main        # 集成分支名；缺省 = coordinator 启动时所在分支
   sharedDirs:               # 只读共享目录（symlink）
     - node_modules
@@ -65,6 +65,8 @@ squad:
 
 `masterBranch` 不硬编码为 `master`：默认取 coordinator 启动时 `git rev-parse --abbrev-ref HEAD` 的当前分支，可被上述 frontmatter 显式覆盖。所有 slave rebase 目标、ff 合并目标、worktree fork 基址统一用此值。
 
+支持终端：alacritty / kitty / gnome-terminal / konsole / wezterm / wt(Windows Terminal) / iterm2 / headless（无窗口降级）。
+
 ## 6. 与 万象术 的关系
 
 两插件是独立插件，互不 import、互不感知，仅在 prompt 层协同：
@@ -72,4 +74,4 @@ squad:
 - **万象术** 提供 review 引擎（`/loop`）、KG、nudge、历史投影等
 - **万象阵** 提供 DAG 调度、worktree 隔离、slave 生命周期、ff 合并
 
-万象阵 不自实现 review。安装万象阵 前必须先安装万象术——因为 slave 的工作流依赖 `/loop`。若缺少万象术，万象阵 插件在启动时尽早失败，给出明确提示，而非降级运行。
+万象阵 不自实现 review。安装万象阵 前必须先安装万象术——因为 slave 的工作流依赖 `/loop`。slave prompt 固定按 万象术 /loop 可用构造（含 `task:` frontmatter 锚点），若 万象术 不存在则 /loop 命令不可用，slave 无法完成 review 流程。两插件互不 import，仅在 prompt 层协同。
