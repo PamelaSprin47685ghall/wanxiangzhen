@@ -75,3 +75,7 @@ squad:
 - **万象阵** 提供 DAG 调度、worktree 隔离、slave 生命周期、ff 合并
 
 万象阵 不自实现 review。安装万象阵 前必须先安装万象术——因为 slave 的工作流依赖 `/loop`。slave prompt 固定按 万象术 /loop 可用构造（含 `task:` frontmatter 锚点），若 万象术 不存在则 /loop 命令不可用，slave 无法完成 review 流程。两插件互不 import，仅在 prompt 层协同。
+
+## 7. 测试时间无关性
+
+万象阵 严格遵循“测试必须时间无关”的第一性原理公理。禁止在并发、异步或状态轮询的测试中硬编码使用 `Promise.sleep` 或 `Date.now`。所有对状态机流转或副作用收敛的验证，必须在测试中使用基于收敛性的 `spinUntil` 轮询判定，以消除 CI 环境下的物理执行速度差异，保证测试的 100% 确定性。

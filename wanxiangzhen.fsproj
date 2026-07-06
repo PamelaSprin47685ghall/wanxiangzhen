@@ -86,6 +86,9 @@
     <Compile Include="tests/E2eBehaviorGapTests.fs" />
     <Compile Include="tests/E2eBehaviorCoverageTests.fs" />
     <Compile Include="tests/E2eIntegrationTests.fs" />
+    <Compile Include="e2e/HarnessHelpers.fs" />
+    <Compile Include="e2e/IsolatedTests.fs" />
+    <Compile Include="e2e/IsolatedTestsB.fs" />
     <Compile Include="e2e/Tests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
