@@ -90,6 +90,7 @@
     <Compile Include="e2e/IsolatedTests.fs" />
     <Compile Include="e2e/IsolatedTestsB.fs" />
     <Compile Include="e2e/Tests.fs" />
+    <Compile Include="tests/ArchitectureTests.fs" />
     <Compile Include="tests/Tests.fs" />
   </ItemGroup>
 </Project>

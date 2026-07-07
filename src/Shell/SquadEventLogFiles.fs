@@ -51,18 +51,16 @@ type SquadEventLogStore(workspaceRoot: string) =
                     }
                 if isNullish handle then return Error "event log lock held"
                 else
-                    let! result =
+                    let line = squadEventToLine at e + "\n"
+                    let! appendRes =
                         promise {
                             try
-                                let line = squadEventToLine at e + "\n"
                                 do! appendFileAsync dataPath line
                                 return Ok ()
                             with ex ->
                                 return Error (string ex.Message)
                         }
-                    try
-                        do! handle?close() |> unbox<JS.Promise<unit>>
-                        do! unlinkAsync lock
-                    with _ -> ()
-                    return result
+                    try do! handle?close() |> unbox<JS.Promise<unit>> with _ -> ()
+                    try do! unlinkAsync lock with _ -> ()
+                    return appendRes
             })

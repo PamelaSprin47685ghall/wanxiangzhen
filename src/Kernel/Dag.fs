@@ -65,34 +65,47 @@ let runningCount (dag: Dag) : int =
     |> List.filter (fun t -> t.Status = Running || t.Status = Submitted)
     |> List.length
 
+type private VisitState = { Visited: Set<string>; Visiting: Set<string>; Result: string list }
+
 let topologicalOrder (tasks: (string * string list) list) : Result<string list, string list> =
-    let idSet = tasks |> List.map fst |> Set.ofList
     let depMap = tasks |> Map.ofList
-    let visited = System.Collections.Generic.HashSet<string>()
-    let visiting = System.Collections.Generic.HashSet<string>()
-    let result = System.Collections.Generic.List<string>()
-    let cyclePath = System.Collections.Generic.List<string>()
-    let mutable hasCycle = false
-    let rec visit (id: string) =
-        if hasCycle then ()
-        elif visiting.Contains id then
-            hasCycle <- true
-            cyclePath.Add id |> ignore
-        elif visited.Contains id then ()
+    let idSet = tasks |> List.map fst |> Set.ofList
+
+    let rec visit (state: VisitState) (id: string) : Result<VisitState, string list> =
+        if state.Visiting.Contains id then Error [ id ]
+        elif state.Visited.Contains id then Ok state
         else
-            visiting.Add id |> ignore
-            match Map.tryFind id depMap with
-            | Some deps -> deps |> List.iter visit
-            | None -> ()
-            visiting.Remove id |> ignore
-            if not hasCycle then
-                visited.Add id |> ignore
-                result.Add id |> ignore
-    idSet |> Set.iter visit
-    if hasCycle then
-        cyclePath |> Seq.toList |> Error
-    else
-        result |> Seq.toList |> Ok
+            let visiting' = state.Visiting.Add id
+            let deps = Map.tryFind id depMap |> Option.defaultValue []
+            let st' = { state with Visiting = visiting' }
+            let rec processDeps (st: VisitState) (remaining: string list) : Result<VisitState, string list> =
+                match remaining with
+                | [] -> Ok st
+                | dep :: rest ->
+                    match visit st dep with
+                    | Error _ as e -> e
+                    | Ok stNext -> processDeps stNext rest
+            match processDeps st' deps with
+            | Error _ as e -> e
+            | Ok stDep ->
+                let stOut = { stDep with Visiting = stDep.Visiting.Remove id
+                                         Visited = stDep.Visited.Add id
+                                         Result = stDep.Result @ [ id ] }
+                Ok stOut
+
+    let rec processAll (st: VisitState) (ids: string list) : Result<VisitState, string list> =
+        match ids with
+        | [] -> Ok st
+        | id :: rest ->
+            match visit st id with
+            | Error _ as e -> e
+            | Ok stNext -> processAll stNext rest
+
+    let initialState = { Visited = Set.empty; Visiting = Set.empty; Result = [] }
+    let orderedIds = idSet |> Set.toList |> List.sort
+    match processAll initialState orderedIds with
+    | Ok finalState -> Ok finalState.Result
+    | Error cycle -> Error cycle
 
 let detectCycle (tasks: (string * string list) list) : string list option =
     match topologicalOrder tasks with

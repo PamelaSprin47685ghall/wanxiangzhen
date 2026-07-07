@@ -6,7 +6,8 @@ open Fable.Core.JS
 open Wanxiangzhen.Tests.Assert
 
 let private allSyncTests : (string * (unit -> unit)) list =
-    Wanxiangzhen.Tests.TaskTests.entries ()
+    Wanxiangzhen.Tests.ArchitectureTests.entries ()
+    @ Wanxiangzhen.Tests.TaskTests.entries ()
     @ Wanxiangzhen.Tests.DagTests.entries ()
     @ Wanxiangzhen.Tests.EventReplayTests.entries ()
     @ Wanxiangzhen.Tests.SchedulerTests.entries ()
